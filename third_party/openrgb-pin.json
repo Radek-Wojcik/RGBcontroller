@@ -1,0 +1,7 @@
+{
+  "version": "1.0rc2",
+  "commit": "0fca93e4544f943d4d7ec8073dba4e47c18ef54b",
+  "commitDate": "2025-09-14",
+  "sha256": "809AF78F6D628C61BEF50CD7BC0B1AEF9A327C757BBFBB7368FDA567E55A81E4",
+  "note": "Hash of OpenRGB.exe from the owner's verified installation (file date 2025-09-14, log header 'OpenRGB v0.9+ (1.0rc2) Commit: 0fca93e'). Copy with tools/Get-PinnedOpenRgb.ps1."
+}
