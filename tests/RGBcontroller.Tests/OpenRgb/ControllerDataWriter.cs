@@ -126,6 +126,27 @@ internal static class ControllerDataWriter
         LedAlternateNames: protocolVersion >= 5 ? ["Esc", "F1"] : [],
         Flags: protocolVersion >= 5 ? 1u : 0u);
 
+    /// <summary>Motherboard with one fixed zone and one resizable ARGB header that starts at 0 LEDs.</summary>
+    public static ControllerData Motherboard() => new(
+        Type: 0,
+        Name: "ASUS TUF GAMING H670-PRO WIFI D4",
+        Vendor: "ASUS",
+        Description: "ASUS Aura USB Device",
+        Version: "",
+        Serial: "",
+        Location: "HID: aura",
+        ActiveMode: 0,
+        Modes: [new("Direct", 0, 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, [])],
+        Zones:
+        [
+            new("Aura Mainboard", 0, 1, 1, 1, 0, 0, [], [], 0),
+            new("Aura Addressable 1", 1, 0, 120, 0, 0, 0, [], [], 0),
+        ],
+        Leds: [new("Aura Mainboard LED", 0)],
+        ColorCount: 1,
+        LedAlternateNames: [],
+        Flags: 0);
+
     private static void Str(List<byte> buffer, string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value + '\0');
