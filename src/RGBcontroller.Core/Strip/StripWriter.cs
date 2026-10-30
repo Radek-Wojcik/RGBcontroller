@@ -277,7 +277,7 @@ public sealed class StripWriter : IAsyncDisposable
 
         State = state;
         PortName = port;
-        _log.Information("Strip {State} {Port}", state, port);
+        _log.Information("Strip {State:l} {Port:l}", state.ToString(), port ?? "-");
         StateChanged?.Invoke(state, port);
     }
 }
