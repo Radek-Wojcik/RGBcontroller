@@ -58,6 +58,8 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
 
     public ConcurrentQueue<(uint Device, int Zone, int Size)> ResizeRequests { get; } = new();
 
+    public ConcurrentQueue<(uint Device, int ModeIndex, string Name, uint ColorMode)> UpdateModeRequests { get; } = new();
+
     /// <summary>Colors (R, G, B) of the last UPDATELEDS per device.</summary>
     public ConcurrentDictionary<uint, (byte R, byte G, byte B)[]> LastColors { get; } = new();
 
@@ -173,6 +175,15 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
                     case OpenRgbPacketId.SetCustomMode:
                         CustomModeRequests.Enqueue(device);
                         break;
+                    case OpenRgbPacketId.UpdateMode:
+                        if (BinaryPrimitives.ReadUInt32LittleEndian(payload) != size)
+                        {
+                            socket.Dispose();
+                            return;
+                        }
+
+                        UpdateModeRequests.Enqueue(ParseModeDescription(device, payload));
+                        break;
                 }
             }
         }
@@ -184,6 +195,22 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
         {
             _clients.TryRemove(socket, out _);
         }
+    }
+
+    /// <summary>Mirrors RGBController::SetModeDescription for protocol 3+ and checks the block is consumed exactly.</summary>
+    private static (uint, int, string, uint) ParseModeDescription(uint device, byte[] payload)
+    {
+        var span = payload.AsSpan();
+        var modeIndex = BinaryPrimitives.ReadInt32LittleEndian(span[4..]);
+        var nameLength = BinaryPrimitives.ReadUInt16LittleEndian(span[8..]);
+        var name = Encoding.UTF8.GetString(span.Slice(10, nameLength)).TrimEnd('\0');
+        var offset = 10 + nameLength + 4 * 11;
+        var colorMode = BinaryPrimitives.ReadUInt32LittleEndian(span[offset..]);
+        offset += 4;
+        var colors = BinaryPrimitives.ReadUInt16LittleEndian(span[offset..]);
+        offset += 2 + 4 * colors;
+        Assert.Equal(payload.Length, offset);
+        return (device, modeIndex, name, colorMode);
     }
 
     private void Resize(uint device, int zoneIndex, int size)
