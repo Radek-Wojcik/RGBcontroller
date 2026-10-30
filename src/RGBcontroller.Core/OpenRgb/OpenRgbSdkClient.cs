@@ -101,6 +101,18 @@ public sealed class OpenRgbSdkClient : IAsyncDisposable
     /// </summary>
     public void RequestRescan() => Send(0, OpenRgbPacketId.RequestRescanDevices, []);
 
+    /// <summary>
+    /// Sets the LED count of a resizable zone (ARGB header). Payload: zone index i32, new size i32.
+    /// The server ignores sizes outside the zone's min/max. Re-read the controller afterwards.
+    /// </summary>
+    public void ResizeZone(int deviceIndex, int zoneIndex, int newSize)
+    {
+        Span<byte> payload = stackalloc byte[8];
+        BinaryPrimitives.WriteInt32LittleEndian(payload, zoneIndex);
+        BinaryPrimitives.WriteInt32LittleEndian(payload[4..], newSize);
+        Send((uint)deviceIndex, OpenRgbPacketId.ResizeZone, payload);
+    }
+
     /// <summary>Switches the device to its Direct/Custom mode for per-LED control.</summary>
     public void SetCustomMode(int deviceIndex) => Send((uint)deviceIndex, OpenRgbPacketId.SetCustomMode, []);
 
