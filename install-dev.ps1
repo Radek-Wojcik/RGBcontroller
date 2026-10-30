@@ -56,8 +56,15 @@ if (-not (Test-Path (Join-Path $publishDir 'openrgb\OpenRGB.exe'))) { throw 'Pub
 # Only the Service (SYSTEM) and administrators write config; users may read config and logs.
 $dataDir = Join-Path $env:ProgramData 'RGBcontroller'
 New-Item -ItemType Directory -Force $dataDir | Out-Null
-icacls $dataDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' /T /Q | Out-Null
+# Set the explicit ACL on the folder only, then make every existing child inherit it. (Applying the folder ACL
+# with /T to files strips them: (OI)(CI) grants do not apply to files, so they end up with no access at all.)
+takeown /F $dataDir /R /A /D Y | Out-Null
+icacls $dataDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' /Q | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "icacls failed ($LASTEXITCODE)." }
+if (Get-ChildItem $dataDir -Force) {
+    icacls (Join-Path $dataDir '*') /reset /T /C /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls /reset failed ($LASTEXITCODE)." }
+}
 New-Item -ItemType Directory -Force $stateDir | Out-Null
 $task = Get-ScheduledTask -TaskName $OpenRgbTaskName -ErrorAction SilentlyContinue
 if (-not (Test-Path $stateFile)) {
