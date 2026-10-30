@@ -53,8 +53,8 @@ internal sealed class LightingHost : IAsyncDisposable
             _log.Warning("Previous RGBcontroller instance ended without releasing the hardware lock");
         }
 
-        _log.Information("Lighting host starting at {StartedAt:HH:mm:ss.fff}, system uptime {Uptime}",
-            _clock.StartedAt, TimeSpan.FromMilliseconds(Environment.TickCount64));
+        _log.Information("Lighting host starting at {StartedAt:HH:mm:ss.fff}, system uptime {Uptime:l}",
+            _clock.StartedAt, TimeSpan.FromMilliseconds(Environment.TickCount64).ToString(@"hh\:mm\:ss"));
         RgbColor.TryParseHex(_config.Lighting.StaticColor, out var color);
 
         if (_config.Strip.Enabled)
