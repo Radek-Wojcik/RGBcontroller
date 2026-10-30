@@ -48,7 +48,7 @@ $dotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'
 if (-not (Test-Path $dotnet)) { $dotnet = 'dotnet' }
 $publishDir = Join-Path $root 'artifacts\publish\service'
 & $dotnet publish (Join-Path $root 'src\RGBcontroller.Service\RGBcontroller.Service.csproj') `
-    -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o $publishDir --nologo
+    -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o $publishDir --nologo --disable-build-servers
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)." }
 if (-not (Test-Path (Join-Path $publishDir 'openrgb\OpenRGB.exe'))) { throw 'Published output is missing openrgb\OpenRGB.exe.' }
 
