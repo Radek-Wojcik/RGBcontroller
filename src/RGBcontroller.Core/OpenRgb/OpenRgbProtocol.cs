@@ -16,6 +16,7 @@ public enum OpenRgbPacketId : uint
     UpdateLeds = 1050,
     UpdateZoneLeds = 1051,
     SetCustomMode = 1100,
+    UpdateMode = 1101,
 }
 
 public static class OpenRgbProtocol

@@ -126,6 +126,32 @@ internal static class ControllerDataWriter
         LedAlternateNames: protocolVersion >= 5 ? ["Esc", "F1"] : [],
         Flags: protocolVersion >= 5 ? 1u : 0u);
 
+    /// <summary>Mouse whose Direct mode is not the first one (G502: Off, Direct, Static ...).</summary>
+    public static ControllerData Mouse() => new(
+        Type: 1,
+        Name: "G502 HERO Gaming Mouse",
+        Vendor: "Logitech",
+        Description: "Logitech Mouse",
+        Version: "",
+        Serial: "",
+        Location: "HID: receiver",
+        ActiveMode: 0,
+        Modes:
+        [
+            new("Off", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),
+            new("Direct", 1, 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, []),
+            new("Static", 2, 0x80, 0, 0, 0, 100, 1, 1, 0, 100, 0, 2, [0x0000FF]),
+        ],
+        Zones:
+        [
+            new("Primary Zone", 0, 1, 1, 1, 0, 0, [], [], 0),
+            new("Logo Zone", 0, 1, 1, 1, 0, 0, [], [], 0),
+        ],
+        Leds: [new("Primary", 0), new("Logo", 1)],
+        ColorCount: 2,
+        LedAlternateNames: [],
+        Flags: 0);
+
     /// <summary>Motherboard with one fixed zone and one resizable ARGB header that starts at 0 LEDs.</summary>
     public static ControllerData Motherboard() => new(
         Type: 0,

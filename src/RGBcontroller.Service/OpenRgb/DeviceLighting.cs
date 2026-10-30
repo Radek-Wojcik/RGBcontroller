@@ -36,7 +36,18 @@ internal sealed class DeviceLighting(
             devices.Add(data);
             _ledCounts.Add(data.Leds.Count);
 
-            client.SetCustomMode(index);
+            var modeIndex = FindPerLedMode(data);
+            if (modeIndex < 0)
+            {
+                _log.Warning("{Device} has no Direct/Custom/Static per-LED mode; colors may not show", data.Name);
+            }
+            else
+            {
+                // UPDATEMODE, not SETCUSTOMMODE: only UpdateMode makes OpenRGB switch the hardware out of its
+                // power-on effect (RAM rainbow, GPU default after a cold boot).
+                client.UpdateMode(index, modeIndex, data.Modes[modeIndex]);
+            }
+
             var colors = new RgbColor[data.Leds.Count];
             colors.AsSpan().Fill(color);
             client.UpdateLeds(index, colors);
@@ -101,6 +112,26 @@ internal sealed class DeviceLighting(
         return resized
             ? await client.GetControllerDataAsync(index, cancellationToken).ConfigureAwait(false)
             : data;
+    }
+
+    /// <summary>Same choice as RGBController::SetCustomMode: Direct, then Custom, then Static, with per-LED or mode-specific colors.</summary>
+    internal static int FindPerLedMode(ControllerData data)
+    {
+        const uint PerLed = 1;
+        const uint ModeSpecific = 2;
+        foreach (var name in (string[])["Direct", "Custom", "Static"])
+        {
+            for (var i = 0; i < data.Modes.Count; i++)
+            {
+                var mode = data.Modes[i];
+                if (mode.Name == name && mode.ColorMode is PerLed or ModeSpecific)
+                {
+                    return i;
+                }
+            }
+        }
+
+        return -1;
     }
 
     private static string Describe(ControllerData data) =>
