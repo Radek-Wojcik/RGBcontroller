@@ -67,11 +67,11 @@ public sealed record OpenRgbConfig
     public int Port { get; set; } = 6742;
 
     /// <summary>
-    /// OpenRGB is not started before the system has been up this long (0 = no wait). Its I2C/NvAPI device scan
-    /// running while Windows brings up the display kept the screen black for seconds at boot (stage 1 gate).
-    /// The strip does not wait.
+    /// OpenRGB is not started before the system has been up this long (0 = no wait, the default). Added while
+    /// investigating a black screen at boot; an A/B boot without the Service showed the same black screen, so
+    /// OpenRGB is not the cause and waiting would only light the keyboard later. The strip never waits.
     /// </summary>
-    public int MinimumUptimeSeconds { get; set; } = 30;
+    public int MinimumUptimeSeconds { get; set; }
 
     /// <summary>How long to wait for the SDK server of a freshly started OpenRGB before restarting it.</summary>
     public int StartupTimeoutSeconds { get; set; } = 30;

@@ -79,8 +79,7 @@ internal sealed class OpenRgbSupervisor
         var bootWait = TimeSpan.FromSeconds(_config.MinimumUptimeSeconds) - _timings.Uptime();
         if (bootWait > TimeSpan.Zero)
         {
-            _log.Information("Waiting {Seconds:0.0} s before starting OpenRGB so its device scan does not run while Windows starts the display",
-                bootWait.TotalSeconds);
+            _log.Information("Waiting {Seconds:0.0} s before starting OpenRGB (openRgb.minimumUptimeSeconds)", bootWait.TotalSeconds);
             if (!await DelayAsync(bootWait, stopToken).ConfigureAwait(false))
             {
                 State = ComponentState.Offline;
