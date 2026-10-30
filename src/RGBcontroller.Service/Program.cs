@@ -1,7 +1,7 @@
 ﻿using RGBcontroller.Core;
 using RGBcontroller.Core.Config;
 using RGBcontroller.Core.Logging;
-using Serilog;
+using Serilog.Events;
 
 namespace RGBcontroller.Service;
 
@@ -34,10 +34,12 @@ internal static class Program
         var log = logger.ForContext(typeof(Program));
         log.Information("RGBcontroller.Service {Version} starting in console mode, data folder {DataRoot}",
             typeof(Program).Assembly.GetName().Version, paths.DataRoot);
-        log.Information("Config {Outcome} from {ConfigFile}", load.Outcome, store.FilePath);
+        var problem = load.Outcome is ConfigLoadOutcome.RecoveredFromCorrupt
+            or ConfigLoadOutcome.InvalidUsingDefaults or ConfigLoadOutcome.TooNewUsingDefaults;
+        log.Information("Config {Outcome:l} from {ConfigFile}", load.Outcome.ToString(), store.FilePath);
         foreach (var message in load.Messages)
         {
-            log.Warning("Config: {Message}", message);
+            log.Write(problem ? LogEventLevel.Warning : LogEventLevel.Information, "Config: {Message:l}", message);
         }
 
         log.Information("Strip: {LedCount} LEDs, {BaudRate} baud, max {MaxFps} FPS, port {Port}",

@@ -41,6 +41,7 @@ Write-Host "Using $dotnet"
 if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE)." }
 
 if ($Test) {
-    & $dotnet test $solution -c $Configuration --no-build
+    # global.json opts in to Microsoft.Testing.Platform, which takes the solution via --solution.
+    & $dotnet test --solution $solution -c $Configuration --no-build
     if ($LASTEXITCODE -ne 0) { throw "Tests failed ($LASTEXITCODE)." }
 }
