@@ -54,6 +54,7 @@ public static partial class ConfigValidator
 
         CheckRange(errors, "openRgb.port", openRgb.Port, 1024, 65535);
         CheckRange(errors, "openRgb.startupTimeoutSeconds", openRgb.StartupTimeoutSeconds, 5, 300);
+        CheckRange(errors, "openRgb.minimumUptimeSeconds", openRgb.MinimumUptimeSeconds, 0, 600);
         CheckRange(errors, "openRgb.deviceSettleMilliseconds", openRgb.DeviceSettleMilliseconds, 0, 10_000);
         CheckRange(errors, "strip.keepAliveMilliseconds", strip.KeepAliveMilliseconds, 100, 60_000);
         foreach (var zone in openRgb.ZoneSizes)
