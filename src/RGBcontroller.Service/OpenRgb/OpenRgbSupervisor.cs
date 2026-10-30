@@ -13,6 +13,9 @@ public sealed record SupervisorTimings(TimeSpan HealthCheckInterval, TimeSpan St
 
     public TimeSpan BlackoutGrace { get; init; } = TimeSpan.FromMilliseconds(300);
 
+    /// <summary>Time since the system started (GetTickCount64).</summary>
+    public Func<TimeSpan> Uptime { get; init; } = static () => TimeSpan.FromMilliseconds(Environment.TickCount64);
+
     /// <summary>SPEC 3: restart back-off 1, 2, 5, 15, 30 s.</summary>
     public static TimeSpan DefaultBackoff(int failures) => failures switch
     {
@@ -71,6 +74,18 @@ internal sealed class OpenRgbSupervisor
         if (killed > 0)
         {
             _log.Warning("Removed {Count} OpenRGB instance(s) not started by the Service", killed);
+        }
+
+        var bootWait = TimeSpan.FromSeconds(_config.MinimumUptimeSeconds) - _timings.Uptime();
+        if (bootWait > TimeSpan.Zero)
+        {
+            _log.Information("Waiting {Seconds:0.0} s before starting OpenRGB so its device scan does not run while Windows starts the display",
+                bootWait.TotalSeconds);
+            if (!await DelayAsync(bootWait, stopToken).ConfigureAwait(false))
+            {
+                State = ComponentState.Offline;
+                return;
+            }
         }
 
         var failures = 0;

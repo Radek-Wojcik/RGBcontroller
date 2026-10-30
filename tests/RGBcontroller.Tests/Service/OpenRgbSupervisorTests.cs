@@ -16,12 +16,14 @@ public sealed class OpenRgbSupervisorTests
     {
         ConnectRetryDelay = TimeSpan.FromMilliseconds(20),
         BlackoutGrace = TimeSpan.FromMilliseconds(1),
+        Uptime = () => TimeSpan.FromHours(1),
     };
 
     [Fact]
     public async Task LightsEveryDeviceInDirectModeWithTheStaticColor()
     {
-        await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard(), ControllerDataWriter.Motherboard());
+        await using var server = new FakeOpenRgbServer(5,
+            ControllerDataWriter.Keyboard(), ControllerDataWriter.Motherboard(), ControllerDataWriter.Mouse());
         await using var run = Start(server, out var supervisor, out var launcher);
 
         await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
@@ -29,10 +31,43 @@ public sealed class OpenRgbSupervisorTests
         Assert.Equal(1, launcher.StrayKills);
         Assert.Equal(1, launcher.Starts);
         Assert.Equal("RGBcontroller", server.ClientName);
-        Assert.Contains(0u, server.CustomModeRequests);
-        Assert.Contains(1u, server.CustomModeRequests);
         Assert.All(server.LastColors[0], c => Assert.Equal(((byte)0, (byte)229, (byte)255), c));
         Assert.Equal(126, server.LastColors[0].Length);
+    }
+
+    [Fact]
+    public async Task PushesDirectModeToHardwareWithUpdateMode()
+    {
+        // SETCUSTOMMODE only selects the mode inside OpenRGB; after a cold boot the RAM kept its rainbow and the GPU
+        // stayed dark until UPDATEMODE made OpenRGB write the mode to the devices.
+        await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard(), ControllerDataWriter.Mouse());
+        await using var run = Start(server, out var supervisor, out _);
+
+        await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
+
+        var requests = server.UpdateModeRequests.OrderBy(r => r.Device).ToArray();
+        Assert.Equal((0u, 0, "Direct", 1u), requests[0]);
+        Assert.Equal((1u, 1, "Direct", 1u), requests[1]);
+        Assert.Empty(server.CustomModeRequests);
+    }
+
+    [Fact]
+    public async Task WaitsForMinimumUptimeBeforeStartingOpenRgb()
+    {
+        await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard());
+        var bootedAt = DateTime.UtcNow;
+        var timings = FastTimings with { Uptime = () => DateTime.UtcNow - bootedAt };
+        var launcher = new FakeLauncher();
+        var config = new OpenRgbConfig { Port = server.Port, MinimumUptimeSeconds = 1 };
+        var supervisor = new OpenRgbSupervisor(launcher, config, new LightingConfig(), new StartupClock(), Logger.None, timings);
+        await using var run = new RunningSupervisor(supervisor);
+
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Assert.Equal(0, launcher.Starts);
+        Assert.Equal(1, launcher.StrayKills);
+
+        await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
+        Assert.True(DateTime.UtcNow - bootedAt >= TimeSpan.FromSeconds(1));
     }
 
     [Fact]

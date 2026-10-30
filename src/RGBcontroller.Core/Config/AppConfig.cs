@@ -66,6 +66,13 @@ public sealed record OpenRgbConfig
 
     public int Port { get; set; } = 6742;
 
+    /// <summary>
+    /// OpenRGB is not started before the system has been up this long (0 = no wait). Its I2C/NvAPI device scan
+    /// running while Windows brings up the display kept the screen black for seconds at boot (stage 1 gate).
+    /// The strip does not wait.
+    /// </summary>
+    public int MinimumUptimeSeconds { get; set; } = 30;
+
     /// <summary>How long to wait for the SDK server of a freshly started OpenRGB before restarting it.</summary>
     public int StartupTimeoutSeconds { get; set; } = 30;
 
@@ -85,6 +92,7 @@ public sealed record OpenRgbConfig
         && ExecutablePath == other.ExecutablePath
         && Host == other.Host
         && Port == other.Port
+        && MinimumUptimeSeconds == other.MinimumUptimeSeconds
         && StartupTimeoutSeconds == other.StartupTimeoutSeconds
         && DeviceSettleMilliseconds == other.DeviceSettleMilliseconds
         && ZoneSizes.SequenceEqual(other.ZoneSizes);
