@@ -9,11 +9,13 @@ namespace RGBcontroller.Service.OpenRgb;
 /// Stage 1 device lighting: re-reads every OpenRGB controller, applies configured zone sizes, switches it to
 /// Direct mode and writes one static color. Idempotent, so it is simply re-run whenever the device list changes.
 /// </summary>
+/// <param name="litDevices">Devices already lit since Service start (shared across OpenRGB restarts so
+/// "First light" is logged once per device, which is what spike R5 measures).</param>
 internal sealed class DeviceLighting(
-    OpenRgbSdkClient client, OpenRgbConfig openRgb, LightingConfig lighting, StartupClock clock, ILogger log)
+    OpenRgbSdkClient client, OpenRgbConfig openRgb, LightingConfig lighting, StartupClock clock, HashSet<string> litDevices, ILogger log)
 {
     private readonly ILogger _log = log.ForContext<DeviceLighting>();
-    private readonly HashSet<string> _litDevices = [];
+    private readonly HashSet<string> _litDevices = litDevices;
     private readonly List<int> _ledCounts = [];
 
     /// <summary>Devices from the last successful <see cref="ApplyAllAsync"/>.</summary>
