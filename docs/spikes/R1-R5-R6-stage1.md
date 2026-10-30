@@ -17,8 +17,13 @@ pinned OpenRGB 1.0rc2 in Session 0. The old `OpenRGB_Admin` task is disabled. Fa
 | Logitech G502 HERO | USB HID (receiver) | 2 |
 
 Applying the static color with Direct mode was accepted for all 5 devices (`Applied #00E5FF to 5 OpenRGB devices`).
-**Pending:** the owner's visual confirmation that each device, the GPU in particular, actually shows the color.
-If the GPU stays unlit, decision R1 (a)/(b) goes back to the owner.
+**Confirmed by the owner: every device, the GPU included, shows the color.** Decision R1 stands; no second
+OpenRGB is needed for the GPU.
+
+Kill test (`taskkill /F /IM OpenRGB.exe` at 21:12:09):
+- The Service saw the SDK connection drop and restarted OpenRGB after 1 s.
+- It reconnected 1.5 s later and re-applied all 5 devices.
+- Exactly one OpenRGB was running afterwards (new pid 32660, Session 0).
 
 ## R5: time to first light
 
@@ -36,8 +41,19 @@ boot from the System event log.
 ## R6: CH340 port loss
 
 The strip writer reconnects with back-off (0.5, 1, 2, 5 s), finds the port again by VID/PID, waits 0.8 s and
-re-sends. This is covered by `StripWriterTests.PortLoss_ReconnectsAndKeepsColors`. **Pending:** unplug and replug
-the LED BOX on the real PC (stage 1 gate); sleep and resume follow in stage 3.
+re-sends. This is covered by `StripWriterTests.PortLoss_ReconnectsAndKeepsColors`.
+
+**Real PC (LED BOX USB unplugged and plugged back):**
+- 21:12:38: the write failed and the writer started searching.
+- 21:12:47: COM3 was present again.
+- 21:12:48: connected and re-sent.
+
+**Observed hardware behaviour:**
+- The board has its own 5 V supply and **keeps showing its last frame while USB is unplugged**, so the
+  re-connect is not visible.
+- After a **power cycle** of the LED BOX the color came back by itself, thanks to the 1 s keep-alive frame.
+
+Sleep and resume follow in stage 3.
 
 ## CPU (static color, 20 s sample, `tools\Measure-RGBcontroller.ps1`)
 
