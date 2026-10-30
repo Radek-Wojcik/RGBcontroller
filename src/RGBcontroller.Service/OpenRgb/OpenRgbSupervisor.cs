@@ -42,6 +42,7 @@ internal sealed class OpenRgbSupervisor
     private readonly SupervisorTimings _timings;
     private readonly ILogger _log;
     private readonly SemaphoreSlim _deviceListChanged = new(0, 1);
+    private readonly HashSet<string> _litDevices = [];
     private int _starts;
 
     public OpenRgbSupervisor(
@@ -135,7 +136,7 @@ internal sealed class OpenRgbSupervisor
             client.Disconnected += cause => disconnected.TrySetResult(cause);
             client.DeviceListUpdated += SignalDeviceListChanged;
 
-            lighting = new DeviceLighting(client, _config, _lighting, _clock, _log);
+            lighting = new DeviceLighting(client, _config, _lighting, _clock, _litDevices, _log);
             await lighting.ApplyAllAsync(stopToken).ConfigureAwait(false);
             State = ComponentState.Ok;
             DevicesApplied?.Invoke(lighting.Devices.Count);
