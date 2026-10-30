@@ -30,12 +30,15 @@ internal static class Program
 
         var paths = options.DataDir is null ? AppPaths.Default : new AppPaths(Path.GetFullPath(options.DataDir));
         var store = new ConfigStore(paths.ConfigFile);
-        var load = store.Load();
 
         if (options.Mode == Mode.Probe)
         {
-            return await Probe.RunAsync(load.Config.OpenRgb, options.Rescan).ConfigureAwait(false);
+            // Read-only: never create the Service's data folder from a user prompt.
+            var probeConfig = File.Exists(paths.ConfigFile) ? store.Load().Config : AppConfig.CreateDefault();
+            return await Probe.RunAsync(probeConfig.OpenRgb, options.Rescan).ConfigureAwait(false);
         }
+
+        var load = store.Load();
 
         if (options.Mode == Mode.None)
         {

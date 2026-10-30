@@ -13,6 +13,20 @@ internal static class Probe
 {
     public static async Task<int> RunAsync(OpenRgbConfig config, bool rescan)
     {
+        try
+        {
+            return await RunCoreAsync(config, rescan).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is System.Net.Sockets.SocketException or TimeoutException or IOException
+            or OperationCanceledException or OpenRgbProtocolException)
+        {
+            Console.Error.WriteLine($"Probe failed for OpenRGB SDK at {config.Host}:{config.Port}: {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static async Task<int> RunCoreAsync(OpenRgbConfig config, bool rescan)
+    {
         await using var client = await OpenRgbSdkClient.ConnectAsync(
             config.Host, config.Port, "RGBcontroller probe", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
         Console.WriteLine($"Connected to {config.Host}:{config.Port}: server protocol {client.ServerProtocolVersion}, using {client.ProtocolVersion}");
