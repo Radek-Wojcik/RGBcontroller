@@ -2,36 +2,52 @@
 
 Windows controller for PC RGB lighting and an Adalight ambilight strip, built to replace OpenRGB's Effects plugin (about 2.6% CPU) with a background service that targets under 1%.
 
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![Status: stage 0 of 6](https://img.shields.io/badge/status-stage_0_of_6-orange)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![Status: stage 1 of 6](https://img.shields.io/badge/status-stage_1_of_6-orange)
 
-> **Status: stage 0 (foundation).** Configuration, logging, IPC contracts and the OpenRGB SDK client exist and are unit tested. The Service does not drive any hardware yet. See [Roadmap](#roadmap).
+> **Status: stage 1 of 6 done.** A Windows Service lights the Adalight strip and all OpenRGB devices in one static color, already on the logon screen. Effects, power handling, ambilight and the UI come next; see [Roadmap](#roadmap).
+
+Service log after a restart on the target PC (Windows started at 13:08:46):
 
 ```text
-> RGBcontroller.Service.exe --console --data-dir %TEMP%\rgbc-stage0
-[INF] RGBcontroller.Service.Program: RGBcontroller.Service 0.0.1.0 starting in console mode, data folder ...\rgbc-stage0
-[INF] RGBcontroller.Service.Program: Config CreatedDefault from ...\rgbc-stage0\config\config.json
-[INF] RGBcontroller.Service.Program: Strip: 113 LEDs, 115200 baud, max 30 FPS, port auto (VID 1A86 PID 7523)
-[INF] RGBcontroller.Service.Program: Running; press Ctrl+C to stop
+13:08:58.199 [INF] LightingHost: Lighting host starting at 13:08:58.095, system uptime 00:00:12
+13:08:59.249 [INF] LightingHost: First light Adalight strip on COM3 1153 ms after Service start
+13:09:03.256 [INF] OpenRgbSupervisor: Connected to OpenRGB SDK (protocol 5, server 5) 5160 ms after Service start
+13:09:03.260 [INF] DeviceLighting: First light Razer Ornata Chroma V2 (132 LEDs) 5164 ms after Service start; Keyboard=132
+13:09:03.260 [INF] DeviceLighting: Applied #00E5FF to 5 OpenRGB devices
 ```
 
 ## Key features (implemented)
 
-- **Own OpenRGB SDK client for OpenRGB 1.0rc2**: it speaks SDK protocol 5, including the device rescan request (packet 140). OpenRGB.NET 3.1.1 stops at protocol 4 and has no rescan; see the [spike report](docs/spikes/R2-R3-openrgb-sdk.md).
-- **Allocation-free LED writes**: `UpdateLeds` reuses one send buffer, and a unit test asserts zero allocated bytes over 100 writes after warm-up.
-- **Fails loudly, never hangs**: requests time out against a hung OpenRGB, dropped connections raise `Disconnected`, and malformed controller data is rejected by an exact-length parser.
-- **Versioned configuration**: schema-versioned JSON with a migration chain, atomic writes, quarantine of corrupt files, and validation. For example, the OpenRGB host must be a loopback address.
-- **Versioned IPC**: a JSON-RPC control contract (StreamJsonRpc) with a major/minor handshake that reports mismatched versions instead of crashing, plus a fixed 16-byte binary header for LED frame streams.
-- **CPU measurement that works on Polish Windows**: [`tools/Measure-RGBcontroller.ps1`](tools/Measure-RGBcontroller.ps1) reads process times through `NtQuerySystemInformation` (`typeperf` fails on localized systems).
+- **Lit before you log in**: a LocalSystem service with automatic start lights the strip 13 s and every OpenRGB device 17 s after boot, before the logon screen appears (measured with [`tools/Measure-TimeToFirstLight.ps1`](tools/Measure-TimeToFirstLight.ps1)).
+- **Exactly one OpenRGB, without the Effects plugin**:
+  - The Service runs a pinned OpenRGB 1.0rc2 copy that has no plugins folder.
+  - It runs headless, bound to `127.0.0.1`, with its own config folder, inside a kill-on-close job object.
+  - Strays are removed; crashes and hung SDKs are restarted with back-off.
+  - Device rescans happen inside the same instance.
+- **Static lighting at 0.000% CPU**: the Service and OpenRGB together averaged 0.000% of the CPU with a static color, compared with 2.58% for OpenRGB with the Effects plugin (same tool, same PC).
+- **Reliable Adalight strip driver**:
+  - Finds the port by USB VID/PID and waits for the board to settle after opening it.
+  - Writes only on change, with a 1 s keep-alive.
+  - Clamps to the serial link's frame rate and applies an estimated current limiter.
+  - Reconnects after the USB device disappears, and always ends with black.
+- **Own OpenRGB SDK client for protocol 5**:
+  - Pushes Direct mode to the hardware with `UPDATEMODE`, sets ARGB zone sizes from the config and requests rescans (packet 140).
+  - Writes LEDs without allocating, and times out instead of hanging.
+  - See the [spike reports](docs/spikes/).
+- **Versioned configuration and IPC**:
+  - Configuration is schema-versioned JSON with migrations, atomic writes and validation (for example, the OpenRGB host must be loopback).
+  - IPC is a JSON-RPC contract with a version handshake.
 
 ## Tech stack
 
 | Area | Technology |
 |---|---|
-| Runtime | C# on .NET 10 (`net10.0`, `net10.0-windows`) |
-| Hardware access | OpenRGB 1.0rc2 SDK server (TCP, loopback), Adalight over a serial port (planned stage 1) |
+| Runtime | C# on .NET 10 (`net10.0`, `net10.0-windows`), self-contained ReadyToRun service build |
+| Hardware access | OpenRGB 1.0rc2 SDK server (TCP, loopback), Adalight over `System.IO.Ports` |
+| Service | `System.ServiceProcess.ServiceBase`, Win32 job object |
 | IPC | Named pipes with StreamJsonRpc 2.26 (System.Text.Json formatter) |
-| Logging | Serilog 4.4 with rolling files |
-| Tests | xUnit v3 on Microsoft.Testing.Platform |
+| Logging | Serilog 4.4 with rolling files in `%ProgramData%\RGBcontroller\logs` |
+| Tests | xUnit v3 on Microsoft.Testing.Platform, fake OpenRGB SDK server, fake serial port |
 | Planned | WPF + WebView2 shell with a React/TypeScript front end, DXGI Desktop Duplication via Vortice.Windows |
 
 ## Architecture
@@ -44,41 +60,79 @@ flowchart LR
     U[RGBcontroller.UI<br/>on demand] -->|named pipes| S
 ```
 
-Only the Service touches hardware. It runs without a logged-in user, so lighting can start on the logon screen. The Agent and UI talk to it over versioned named-pipe IPC. The full specification is in [SPEC.md](SPEC.md).
+Only the Service touches hardware. It runs without a logged-in user, so lighting starts on the logon screen. The Agent and UI (later stages) talk to it over versioned named-pipe IPC. The full specification is in [SPEC.md](SPEC.md).
 
 ## Getting started
 
-Requirements: Windows 10 or 11 and the .NET 10 SDK. `build.ps1` also finds a user-local SDK installed with the official script:
+Requirements:
+- Windows 10 or 11.
+- The .NET 10 SDK.
+- The PawnIO driver, for SMBus devices such as RAM.
+- OpenRGB 1.0rc2 (commit `0fca93e`) installed in `C:\Program Files\OpenRGB`. This is the source of the pinned copy, which is verified by SHA-256.
+
+`build.ps1` also finds a user-local SDK installed with the official script:
 
 ```powershell
 & ([scriptblock]::Create((Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -UseBasicParsing).Content)) -Channel 10.0
 ```
 
-Build and run the tests:
+Copy the pinned OpenRGB (plugins excluded), then build and run the tests:
 
 ```powershell
+.\tools\Get-PinnedOpenRgb.ps1
 .\build.ps1 -Test
 ```
 
-Run the Service skeleton in the console. It writes a default config and logs to the given folder and does not touch any hardware:
+Install the Service for development. Run it from an elevated PowerShell. It disables (never deletes) an existing `OpenRGB_Admin` autostart task:
 
 ```powershell
-.\src\RGBcontroller.Service\bin\Debug\net10.0-windows\RGBcontroller.Service.exe --console --data-dir "$env:TEMP\rgbc-stage0"
+.\install-dev.ps1
 ```
+
+Undo everything and restore the previous OpenRGB autostart:
+
+```powershell
+.\uninstall-dev.ps1
+```
+
+## Usage
+
+The static color and the hardware settings live in `%ProgramData%\RGBcontroller\config\config.json`. Only administrators can write this file. Restart the service after editing it.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `lighting.staticColor` | `#00E5FF` | Color for all devices and the strip |
+| `lighting.stripBrightnessPercent` | `50` | Strip brightness, 100 = full diode power |
+| `lighting.deviceBrightnessPercent` | `100` | Brightness of the OpenRGB devices |
+| `strip.portName` | `null` | COM port override; `null` = find by VID/PID `1A86:7523` |
+| `strip.ledCount` | `113` | LEDs on the strip |
+| `openRgb.zoneSizes` | 3 x 20 | LED counts of the motherboard ARGB headers |
+
+Diagnostics:
+
+```powershell
+& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --probe --rescan
+.\tools\Measure-TimeToFirstLight.ps1
+.\tools\Measure-RGBcontroller.ps1 -Label static -DurationSeconds 60
+```
+
+`--probe` only reads from the running OpenRGB; with `--rescan` it also asks OpenRGB to re-detect the devices and times it.
 
 ## Project structure
 
 ```text
 src/
-  RGBcontroller.Core/      config, logging, OpenRGB SDK client (effects and device model later)
+  RGBcontroller.Core/      config, logging, Adalight frames and strip writer, OpenRGB SDK client
   RGBcontroller.Ipc/       JSON-RPC contracts and frame codec shared by all processes
-  RGBcontroller.Service/   background service (console skeleton in stage 0)
-  RGBcontroller.Agent/     user-session tray agent (skeleton)
-  RGBcontroller.UI/        on-demand UI shell (skeleton)
-tests/RGBcontroller.Tests/ unit tests, including a fake OpenRGB SDK server
-tools/                     CPU measurement script
-docs/spikes/               technical spike reports
+  RGBcontroller.Service/   Windows Service: OpenRGB supervisor, device lighting, probe
+  RGBcontroller.Agent/     user-session tray agent (skeleton, stage 4)
+  RGBcontroller.UI/        on-demand UI shell (skeleton, stage 5)
+tests/RGBcontroller.Tests/ unit tests with a fake OpenRGB SDK server and a fake serial port
+tools/                     pinned OpenRGB copy, CPU and time-to-first-light measurement
+third_party/               pin manifest of OpenRGB 1.0rc2 (the binaries themselves are not committed)
+docs/spikes/               technical spike reports with hardware results
 reference/                 verified hardware evidence (test scripts, measurements)
+install-dev.ps1            reversible development install
 ```
 
 ## Testing
@@ -87,13 +141,18 @@ reference/                 verified hardware evidence (test scripts, measurement
 .\build.ps1 -Test
 ```
 
-The suite has 61 tests. They cover config load, migration and recovery, validation, logging, IPC round-trips over an in-memory duplex stream, the frame codec, and the OpenRGB client against an in-process fake SDK server.
+The suite has 95 tests. They cover the following:
+- config load, migration, recovery and validation, plus logging;
+- IPC round-trips and the frame codec;
+- Adalight frames: header, color order, brightness, current limiter, no allocations;
+- the strip writer against a fake serial port: reconnect, keep-alive, black on stop;
+- the OpenRGB supervisor against an in-process fake SDK server: Direct mode, zone resize, re-apply after device list changes, restart after a crash or a hung SDK, black on stop.
 
 ## Roadmap
 
 Each stage ends with a hardware test gate on the target PC.
 
-1. **Service + OpenRGB supervisor + Adalight**: lighting on the logon screen after cold boot, single OpenRGB instance.
+1. ~~**Service + OpenRGB supervisor + Adalight**: lighting on the logon screen after cold boot, single OpenRGB instance.~~ Done (`v0.1.0-stage1`).
 2. **Effect engine**: Static, Breathing, Wave, Radial, Mirror, Color cycle, Aurora, synchronized across devices, under 1% CPU.
 3. **Power and session handling**: sleep, hibernate, display off, lock and shutdown without flicker or duplicate processes.
 4. **Agent and ambilight**: screen capture with letterbox and HDR handling, tray, global hotkeys.
