@@ -38,7 +38,8 @@ public static class DefaultLighting
         Zone(Ram, "HyperX Slot 4", LedShape.Line, vertical: true),
     ];
 
-    /// <summary>Frame rate caps follow SPEC 5.1: 30 for USB devices, mouse 15, GPU 10 and RAM 12 (I2C/SMBus).</summary>
+    /// <summary>Frame rate caps follow SPEC 5.1: 30 for USB devices, mouse 15, GPU 10. RAM runs at 5: every RAM frame is
+    /// many SMBus writes that OpenRGB busy-waits on in the kernel (1.74% CPU at 12 FPS, measured at the stage 2 gate).</summary>
     public static IReadOnlyList<GroupConfig> Groups { get; } =
     [
         new()
@@ -47,7 +48,7 @@ public static class DefaultLighting
             Members = [new(Motherboard, "Aura Addressable 1"), new(Motherboard, "Aura Addressable 2"), new(Motherboard, "Aura Addressable 3")],
         },
         new() { Name = BoardGroup, Members = [new(Motherboard, "Aura Mainboard")] },
-        new() { Name = RamGroup, Members = [new(Ram)], MaxFps = 12 },
+        new() { Name = RamGroup, Members = [new(Ram)], MaxFps = 5 },
         new() { Name = KeyboardGroup, Members = [new(Keyboard)] },
         new() { Name = MouseGroup, Members = [new(Mouse)], MaxFps = 15 },
         new() { Name = GpuGroup, Members = [new(Gpu)], MaxFps = 10 },

@@ -161,25 +161,55 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
                 return $"No profile named '{name}'.";
             }
 
-            _config = _config with { Lighting = _config.Lighting with { ActiveProfile = profile.Name } };
-            _lighting?.Apply(_config.Lighting);
+            Commit(_config with { Lighting = _config.Lighting with { ActiveProfile = profile.Name } });
             _log.Information("Active profile set to {Profile}", profile.Name);
-            if (!_canSaveConfig)
-            {
-                _log.Warning("Config file was rejected at start; the profile change is not saved");
-                return null;
-            }
-
-            try
-            {
-                _store.Save(_config);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _log.Warning("Could not save the active profile: {Error}", ex.Message);
-            }
-
             return null;
+        }
+    }
+
+    public string? TuneGroup(GroupTuningRequest request)
+    {
+        lock (_configLock)
+        {
+            var tuning = new GroupTuning(request.Group, request.Profile, request.MaxFps, request.Speed, request.Scale, request.BrightnessPercent);
+            var lighting = LightingEdits.Apply(_config.Lighting, tuning, out var error);
+            if (lighting is null)
+            {
+                return error;
+            }
+
+            var config = _config with { Lighting = lighting };
+            var errors = ConfigValidator.Validate(config);
+            if (errors.Count > 0)
+            {
+                return string.Join(" ", errors);
+            }
+
+            Commit(config);
+            _log.Information("Tuned group {Group} in {Profile}: fps {Fps}, speed {Speed}, scale {Scale}, brightness {Brightness}",
+                request.Group, request.Profile ?? lighting.ActiveProfile, request.MaxFps, request.Speed, request.Scale, request.BrightnessPercent);
+            return null;
+        }
+    }
+
+    /// <summary>Applies <paramref name="config"/> to the running engine and saves it. Call under the config lock.</summary>
+    private void Commit(AppConfig config)
+    {
+        _config = config;
+        _lighting?.Apply(config.Lighting);
+        if (!_canSaveConfig)
+        {
+            _log.Warning("Config file was rejected at start; the change is not saved");
+            return;
+        }
+
+        try
+        {
+            _store.Save(config);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.Warning("Could not save the config: {Error}", ex.Message);
         }
     }
 

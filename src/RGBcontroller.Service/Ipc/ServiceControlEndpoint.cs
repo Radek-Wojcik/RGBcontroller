@@ -11,6 +11,9 @@ internal interface IControllableHost
 
     /// <returns>Null on success, otherwise a message for the client.</returns>
     string? SetActiveProfile(string name);
+
+    /// <returns>Null on success, otherwise a message for the client.</returns>
+    string? TuneGroup(GroupTuningRequest request);
 }
 
 /// <summary>Validates IPC input and forwards it to the host. Runs on StreamJsonRpc threads.</summary>
@@ -48,4 +51,23 @@ internal sealed class ServiceControlEndpoint(IControllableHost host) : IServiceC
         var error = host.SetActiveProfile(name);
         return Task.FromResult(new CommandResult(error is null, error));
     }
+
+    public Task<CommandResult> TuneGroupAsync(GroupTuningRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!IsName(request.Group) || (request.Profile is not null && !IsName(request.Profile)))
+        {
+            return Task.FromResult(new CommandResult(false, $"Group and profile names have 1-{MaxNameLength} characters."));
+        }
+
+        if (request.Speed is { } speed && !double.IsFinite(speed) || request.Scale is { } scale && !double.IsFinite(scale))
+        {
+            return Task.FromResult(new CommandResult(false, "Speed and scale must be finite numbers."));
+        }
+
+        var error = host.TuneGroup(request);
+        return Task.FromResult(new CommandResult(error is null, error));
+    }
+
+    private static bool IsName(string? name) => !string.IsNullOrWhiteSpace(name) && name.Length <= MaxNameLength;
 }

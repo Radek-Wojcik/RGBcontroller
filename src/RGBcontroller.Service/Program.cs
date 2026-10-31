@@ -1,7 +1,9 @@
-﻿using System.ServiceProcess;
+﻿using System.Globalization;
+using System.ServiceProcess;
 using RGBcontroller.Core;
 using RGBcontroller.Core.Config;
 using RGBcontroller.Core.Logging;
+using RGBcontroller.Ipc;
 using RGBcontroller.Service.Ipc;
 using Serilog;
 using Serilog.Events;
@@ -20,6 +22,9 @@ internal static class Program
                                  --rescan also asks OpenRGB to re-detect devices and times it.
           --status               Show the running Service's state and its profiles (control pipe, no elevation).
           --profile <name>       Switch the running Service to profile <name> and save it.
+          --group <name> [--in <profile>] [--fps <1-60>] [--speed <cycles/s>] [--scale <x>] [--brightness <0-100>]
+                                 Tune a group live and save it: the frame rate applies to the group in every
+                                 profile, speed/scale/brightness to its effect in <profile> (default: the active one).
           --data-dir <folder>    Use <folder> instead of %ProgramData%\RGBcontroller.
         """;
 
@@ -31,9 +36,15 @@ internal static class Program
             return 2;
         }
 
-        if (options.Mode is Mode.Status or Mode.SetProfile)
+        if (options.Mode is Mode.Status or Mode.SetProfile or Mode.TuneGroup)
         {
-            return await ControlClient.RunAsync(options.Mode == Mode.SetProfile ? options.Profile : null).ConfigureAwait(false);
+            Func<IServiceControl, Task<CommandResult>>? command = options.Mode switch
+            {
+                Mode.SetProfile => service => service.SetActiveProfileAsync(options.Profile!, CancellationToken.None),
+                Mode.TuneGroup => service => service.TuneGroupAsync(options.Tuning!, CancellationToken.None),
+                _ => null,
+            };
+            return await ControlClient.RunAsync(command).ConfigureAwait(false);
         }
 
         var paths = options.DataDir is null ? AppPaths.Default : new AppPaths(Path.GetFullPath(options.DataDir));
@@ -116,9 +127,10 @@ internal static class Program
         Probe,
         Status,
         SetProfile,
+        TuneGroup,
     }
 
-    private sealed record Options(Mode Mode, bool Rescan, string? DataDir, string? Profile = null);
+    private sealed record Options(Mode Mode, bool Rescan, string? DataDir, string? Profile = null, GroupTuningRequest? Tuning = null);
 
     private static bool TryParse(string[] args, out Options options)
     {
@@ -126,6 +138,7 @@ internal static class Program
         var rescan = false;
         string? dataDir = null;
         string? profile = null;
+        GroupTuningRequest? tuning = null;
         options = new Options(mode, rescan, dataDir);
         for (var i = 0; i < args.Length; i++)
         {
@@ -144,6 +157,29 @@ internal static class Program
                     mode = Mode.SetProfile;
                     profile = args[++i];
                     break;
+                case "--group" when mode == Mode.None && i + 1 < args.Length:
+                    mode = Mode.TuneGroup;
+                    tuning = new GroupTuningRequest(args[++i]);
+                    break;
+                case "--in" when tuning is not null && i + 1 < args.Length:
+                    tuning = tuning with { Profile = args[++i] };
+                    break;
+                case "--fps" when tuning is not null && i + 1 < args.Length && int.TryParse(args[i + 1], out var fps):
+                    tuning = tuning with { MaxFps = fps };
+                    i++;
+                    break;
+                case "--brightness" when tuning is not null && i + 1 < args.Length && int.TryParse(args[i + 1], out var brightness):
+                    tuning = tuning with { BrightnessPercent = brightness };
+                    i++;
+                    break;
+                case "--speed" when tuning is not null && i + 1 < args.Length && TryParseNumber(args[i + 1], out var speed):
+                    tuning = tuning with { Speed = speed };
+                    i++;
+                    break;
+                case "--scale" when tuning is not null && i + 1 < args.Length && TryParseNumber(args[i + 1], out var scale):
+                    tuning = tuning with { Scale = scale };
+                    i++;
+                    break;
                 case "--rescan":
                     rescan = true;
                     break;
@@ -160,7 +196,11 @@ internal static class Program
             return false;
         }
 
-        options = new Options(mode, rescan, dataDir, profile);
+        options = new Options(mode, rescan, dataDir, profile, tuning);
         return true;
     }
+
+    /// <summary>Accepts "0.3" and the Polish "0,3".</summary>
+    private static bool TryParseNumber(string text, out double value) =>
+        double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
 }

@@ -109,5 +109,8 @@ public sealed class IpcContractTests
 
         public Task<CommandResult> SetActiveProfileAsync(string name, CancellationToken cancellationToken) =>
             Task.FromResult(new CommandResult(true, null));
+
+        public Task<CommandResult> TuneGroupAsync(GroupTuningRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new CommandResult(true, null));
     }
 }

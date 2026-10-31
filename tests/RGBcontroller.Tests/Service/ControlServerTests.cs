@@ -33,6 +33,22 @@ public sealed class ControlServerTests
         var unknown = await service.SetActiveProfileAsync("Disco", ct);
         Assert.False(unknown.Success);
         Assert.Equal("Night", host.Active);
+
+        var tuned = await service.TuneGroupAsync(new GroupTuningRequest("RAM", MaxFps: 5, Speed: 0.3), ct);
+        Assert.True(tuned.Success);
+        Assert.Equal(new GroupTuningRequest("RAM", MaxFps: 5, Speed: 0.3), host.LastTuning);
+    }
+
+    [Fact]
+    public async Task Endpoint_RejectsNonFiniteTuning()
+    {
+        var host = new FakeHost();
+        var endpoint = new ServiceControlEndpoint(host);
+
+        var result = await endpoint.TuneGroupAsync(new GroupTuningRequest("RAM", Speed: double.NaN), TestContext.Current.CancellationToken);
+
+        Assert.False(result.Success);
+        Assert.Null(host.LastTuning);
     }
 
     [Fact]
@@ -65,6 +81,14 @@ public sealed class ControlServerTests
         public string Active { get; private set; } = "Rainbow";
 
         public int SetCalls { get; private set; }
+
+        public GroupTuningRequest? LastTuning { get; private set; }
+
+        public string? TuneGroup(GroupTuningRequest request)
+        {
+            LastTuning = request;
+            return null;
+        }
 
         public ServiceStatus GetStatus() => new(ComponentState.Ok, ComponentState.Ok, null, Active);
 
