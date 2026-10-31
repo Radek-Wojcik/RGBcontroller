@@ -32,8 +32,8 @@ public sealed class ConfigMigrator
         TargetVersion = targetVersion;
     }
 
-    /// <summary>Migrations shipped with the app. Empty while the schema is at version 1.</summary>
-    public static ConfigMigrator Default { get; } = new([], AppConfig.CurrentSchemaVersion);
+    /// <summary>Migrations shipped with the app.</summary>
+    public static ConfigMigrator Default { get; } = new([new LightingV2Migration()], AppConfig.CurrentSchemaVersion);
 
     public int TargetVersion { get; }
 
