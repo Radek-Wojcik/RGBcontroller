@@ -15,26 +15,34 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
 {
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource _stop = new();
-    private readonly ConcurrentBag<Socket> _clients = [];
+    private readonly ConcurrentDictionary<Socket, SemaphoreSlim> _clients = new();
+    private readonly Lock _controllersLock = new();
     private readonly Task _acceptLoop;
+    private List<ControllerData> _controllers;
 
     public FakeOpenRgbServer(uint serverProtocolVersion = 5, params ControllerData[] controllers)
     {
         ServerProtocolVersion = serverProtocolVersion;
-        Controllers = controllers;
+        _controllers = [.. controllers];
         _listener.Start();
         _acceptLoop = Task.Run(AcceptLoopAsync);
     }
 
     public uint ServerProtocolVersion { get; }
 
-    public IReadOnlyList<ControllerData> Controllers { get; set; }
+    public IReadOnlyList<ControllerData> Controllers
+    {
+        get { lock (_controllersLock) { return [.. _controllers]; } }
+        set { lock (_controllersLock) { _controllers = [.. value]; } }
+    }
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
 
     public string? ClientName { get; private set; }
 
     public uint? ClientProtocolVersion { get; private set; }
+
+    public int ConnectedClients => _clients.Count;
 
     public int RescanRequests;
 
@@ -48,11 +56,27 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
 
     public ConcurrentQueue<uint> CustomModeRequests { get; } = new();
 
+    public ConcurrentQueue<(uint Device, int Zone, int Size)> ResizeRequests { get; } = new();
+
+    public ConcurrentQueue<(uint Device, int ModeIndex, string Name, uint ColorMode)> UpdateModeRequests { get; } = new();
+
+    /// <summary>Colors (R, G, B) of the last UPDATELEDS per device.</summary>
+    public ConcurrentDictionary<uint, (byte R, byte G, byte B)[]> LastColors { get; } = new();
+
     public void DropAllClients()
     {
-        foreach (var client in _clients)
+        foreach (var client in _clients.Keys)
         {
             client.Dispose();
+        }
+    }
+
+    /// <summary>Pushes DEVICE_LIST_UPDATED to every client, as OpenRGB does on hot-plug or rescan.</summary>
+    public async Task NotifyDeviceListUpdatedAsync()
+    {
+        foreach (var (socket, sendLock) in _clients)
+        {
+            await SendAsync(socket, sendLock, 0, OpenRgbPacketId.DeviceListUpdated, []);
         }
     }
 
@@ -77,12 +101,13 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
         while (!_stop.IsCancellationRequested)
         {
             var socket = await _listener.AcceptSocketAsync(_stop.Token);
-            _clients.Add(socket);
-            _ = Task.Run(() => ServeAsync(socket));
+            var sendLock = new SemaphoreSlim(1, 1);
+            _clients[socket] = sendLock;
+            _ = Task.Run(() => ServeAsync(socket, sendLock));
         }
     }
 
-    private async Task ServeAsync(Socket socket)
+    private async Task ServeAsync(Socket socket, SemaphoreSlim sendLock)
     {
         var header = new byte[OpenRgbProtocol.HeaderSize];
         try
@@ -109,22 +134,25 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
                         break;
                     case OpenRgbPacketId.RequestProtocolVersion:
                         ClientProtocolVersion = BinaryPrimitives.ReadUInt32LittleEndian(payload);
-                        await ReplyAsync(socket, 0, id, U32(ServerProtocolVersion));
+                        await SendAsync(socket, sendLock, 0, id, U32(ServerProtocolVersion));
                         break;
                     case OpenRgbPacketId.RequestControllerCount:
-                        await ReplyAsync(socket, 0, id, U32((uint)Controllers.Count));
+                        await SendAsync(socket, sendLock, 0, id, U32((uint)Controllers.Count));
                         break;
                     case OpenRgbPacketId.RequestControllerData:
                         var version = payload.Length == 4 ? BinaryPrimitives.ReadUInt32LittleEndian(payload) : 0;
-                        await ReplyAsync(socket, device, id, ControllerDataWriter.Write(Controllers[(int)device], version));
+                        await SendAsync(socket, sendLock, device, id, ControllerDataWriter.Write(Controllers[(int)device], version));
                         break;
                     case OpenRgbPacketId.RequestRescanDevices:
                         Interlocked.Increment(ref RescanRequests);
                         for (var i = 0; i < DeviceListUpdatesPerRescan; i++)
                         {
-                            await ReplyAsync(socket, 0, OpenRgbPacketId.DeviceListUpdated, []);
+                            await SendAsync(socket, sendLock, 0, OpenRgbPacketId.DeviceListUpdated, []);
                         }
 
+                        break;
+                    case OpenRgbPacketId.ResizeZone:
+                        Resize(device, BinaryPrimitives.ReadInt32LittleEndian(payload), BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(4)));
                         break;
                     case OpenRgbPacketId.UpdateLeds:
                         if (BinaryPrimitives.ReadUInt32LittleEndian(payload) != size)
@@ -135,9 +163,26 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
                         }
 
                         LedUpdates.Enqueue((device, payload));
+                        var count = BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(4));
+                        var colors = new (byte, byte, byte)[count];
+                        for (var i = 0; i < count; i++)
+                        {
+                            colors[i] = (payload[6 + i * 4], payload[7 + i * 4], payload[8 + i * 4]);
+                        }
+
+                        LastColors[device] = colors;
                         break;
                     case OpenRgbPacketId.SetCustomMode:
                         CustomModeRequests.Enqueue(device);
+                        break;
+                    case OpenRgbPacketId.UpdateMode:
+                        if (BinaryPrimitives.ReadUInt32LittleEndian(payload) != size)
+                        {
+                            socket.Dispose();
+                            return;
+                        }
+
+                        UpdateModeRequests.Enqueue(ParseModeDescription(device, payload));
                         break;
                 }
             }
@@ -146,9 +191,49 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
         {
             // Client went away or the test dropped it.
         }
+        finally
+        {
+            _clients.TryRemove(socket, out _);
+        }
     }
 
-    private static async Task ReplyAsync(Socket socket, uint device, OpenRgbPacketId id, byte[] payload)
+    /// <summary>Mirrors RGBController::SetModeDescription for protocol 3+ and checks the block is consumed exactly.</summary>
+    private static (uint, int, string, uint) ParseModeDescription(uint device, byte[] payload)
+    {
+        var span = payload.AsSpan();
+        var modeIndex = BinaryPrimitives.ReadInt32LittleEndian(span[4..]);
+        var nameLength = BinaryPrimitives.ReadUInt16LittleEndian(span[8..]);
+        var name = Encoding.UTF8.GetString(span.Slice(10, nameLength)).TrimEnd('\0');
+        var offset = 10 + nameLength + 4 * 11;
+        var colorMode = BinaryPrimitives.ReadUInt32LittleEndian(span[offset..]);
+        offset += 4;
+        var colors = BinaryPrimitives.ReadUInt16LittleEndian(span[offset..]);
+        offset += 2 + 4 * colors;
+        Assert.Equal(payload.Length, offset);
+        return (device, modeIndex, name, colorMode);
+    }
+
+    private void Resize(uint device, int zoneIndex, int size)
+    {
+        ResizeRequests.Enqueue((device, zoneIndex, size));
+        lock (_controllersLock)
+        {
+            var data = _controllers[(int)device];
+            var zone = data.Zones[zoneIndex];
+            if (size < zone.LedsMin || size > zone.LedsMax)
+            {
+                return;
+            }
+
+            var zones = data.Zones.ToArray();
+            zones[zoneIndex] = zone with { LedsCount = (uint)size };
+            var ledCount = zones.Sum(z => (int)z.LedsCount);
+            var leds = Enumerable.Range(0, ledCount).Select(i => new ControllerLed($"LED {i}", (uint)i)).ToArray();
+            _controllers[(int)device] = data with { Zones = zones, Leds = leds, ColorCount = ledCount };
+        }
+    }
+
+    private static async Task SendAsync(Socket socket, SemaphoreSlim sendLock, uint device, OpenRgbPacketId id, byte[] payload)
     {
         var packet = new byte[OpenRgbProtocol.HeaderSize + payload.Length];
         "ORGB"u8.CopyTo(packet);
@@ -156,7 +241,15 @@ internal sealed class FakeOpenRgbServer : IAsyncDisposable
         BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(8), (uint)id);
         BinaryPrimitives.WriteUInt32LittleEndian(packet.AsSpan(12), (uint)payload.Length);
         payload.CopyTo(packet, OpenRgbProtocol.HeaderSize);
-        await socket.SendAsync(packet);
+        await sendLock.WaitAsync();
+        try
+        {
+            await socket.SendAsync(packet);
+        }
+        finally
+        {
+            sendLock.Release();
+        }
     }
 
     private static async Task ReadExactlyAsync(Socket socket, byte[] buffer)

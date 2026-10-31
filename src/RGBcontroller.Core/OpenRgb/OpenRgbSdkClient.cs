@@ -101,8 +101,70 @@ public sealed class OpenRgbSdkClient : IAsyncDisposable
     /// </summary>
     public void RequestRescan() => Send(0, OpenRgbPacketId.RequestRescanDevices, []);
 
-    /// <summary>Switches the device to its Direct/Custom mode for per-LED control.</summary>
+    /// <summary>
+    /// Sets the LED count of a resizable zone (ARGB header). Payload: zone index i32, new size i32.
+    /// The server ignores sizes outside the zone's min/max. Re-read the controller afterwards.
+    /// </summary>
+    public void ResizeZone(int deviceIndex, int zoneIndex, int newSize)
+    {
+        Span<byte> payload = stackalloc byte[8];
+        BinaryPrimitives.WriteInt32LittleEndian(payload, zoneIndex);
+        BinaryPrimitives.WriteInt32LittleEndian(payload[4..], newSize);
+        Send((uint)deviceIndex, OpenRgbPacketId.ResizeZone, payload);
+    }
+
+    /// <summary>
+    /// Only selects the Direct/Custom/Static mode index on the server; OpenRGB 1.0rc2 does NOT push the mode to the
+    /// hardware for this packet (RGBController::SetCustomMode just sets active_mode). Use <see cref="UpdateMode"/>.
+    /// </summary>
     public void SetCustomMode(int deviceIndex) => Send((uint)deviceIndex, OpenRgbPacketId.SetCustomMode, []);
+
+    /// <summary>
+    /// Activates <paramref name="modeIndex"/> and pushes it to the hardware (RGBController::UpdateMode). Payload as
+    /// RGBController::GetModeDescription: u32 size, i32 mode index, then the mode block (name included, the server
+    /// stores it). Needed after a cold boot, when devices run their power-on effect.
+    /// </summary>
+    public void UpdateMode(int deviceIndex, int modeIndex, ControllerMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(mode);
+        var name = Encoding.UTF8.GetBytes(mode.Name + '\0');
+        // 12 u32 mode fields: value, flags, speed min/max, brightness min/max, colors min/max, speed, brightness, direction, color mode.
+        var size = 4 + 4 + 2 + name.Length + 4 * 12 + 2 + 4 * mode.Colors.Count;
+        var payload = new byte[size];
+        var offset = 0;
+        void U32(uint value)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(offset), value);
+            offset += 4;
+        }
+
+        U32((uint)size);
+        U32(unchecked((uint)modeIndex));
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(offset), (ushort)name.Length);
+        offset += 2;
+        name.CopyTo(payload, offset);
+        offset += name.Length;
+        U32(unchecked((uint)mode.Value));
+        U32(mode.Flags);
+        U32(mode.SpeedMin);
+        U32(mode.SpeedMax);
+        U32(mode.BrightnessMin);
+        U32(mode.BrightnessMax);
+        U32(mode.ColorsMin);
+        U32(mode.ColorsMax);
+        U32(mode.Speed);
+        U32(mode.Brightness);
+        U32(mode.Direction);
+        U32(mode.ColorMode);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(offset), (ushort)mode.Colors.Count);
+        offset += 2;
+        foreach (var color in mode.Colors)
+        {
+            U32(color);
+        }
+
+        Send((uint)deviceIndex, OpenRgbPacketId.UpdateMode, payload);
+    }
 
     /// <summary>Writes all LEDs of a device. Must pass exactly the device's LED count. Does not allocate.</summary>
     public void UpdateLeds(int deviceIndex, ReadOnlySpan<RgbColor> colors)
