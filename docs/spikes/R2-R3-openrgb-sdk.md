@@ -58,10 +58,17 @@ segments, flags, alt names), truncated or padded or wrong-version data rejected,
 field, **zero allocations per `UpdateLeds` after warm-up**, rescan with three `DEVICE_LIST_UPDATED` notices, a
 hung server timing out instead of hanging, and a dropped connection raising `Disconnected`.
 
-## Open for stage 1 (live verification on the owner's PC)
+## Live verification (stage 1, 2026-10-30, owner's PC)
 
-- Connect our client to the supervised OpenRGB 1.0rc2 and read all 5 devices. The exact-length parser either
-  succeeds or reports the offset where our layout differs.
-- Send packet 140 and record the `DEVICE_LIST_UPDATED` timing (expected ~6 s detection) and that all devices
-  come back with the same names and locations.
-- Confirm no plugin is loaded and the server listens on 127.0.0.1 only.
+Done against the supervised OpenRGB 1.0rc2 (running as LocalSystem) with `RGBcontroller.Service.exe --probe [--rescan]`:
+
+- **R2 confirmed.** Negotiated protocol 5 (server 5). All 5 devices were parsed by the exact-length parser:
+  - HyperX Predator RGB: 4 zones x 5 LEDs.
+  - RTX 3080: 1 LED.
+  - ASUS TUF H670: 3 onboard LEDs plus Aura Addressable 1-3, resizable 0-120.
+  - Razer Ornata Chroma V2: 132 LEDs, 6x22 matrix.
+  - G502: 2 LEDs.
+- **R3 confirmed.** Packet 140 produced 11 `DEVICE_LIST_UPDATED` notices, the last one 1.1 s after the request. The same 5 devices came back. The Service re-applied lighting by itself in the single OpenRGB instance (same pid).
+- **Zone sizes do not survive a rescan.** The ARGB zones come back at 0 LEDs, so the Service re-applies the configured sizes after every device list change (already implemented).
+- **Loopback only.** The SDK server listens on `127.0.0.1:6742` only.
+- **No plugins.** The private config has no `Plugins` section, and the pinned copy has no `plugins` folder.

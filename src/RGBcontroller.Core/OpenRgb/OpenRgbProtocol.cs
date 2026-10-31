@@ -12,9 +12,11 @@ public enum OpenRgbPacketId : uint
     SetClientName = 50,
     DeviceListUpdated = 100,
     RequestRescanDevices = 140,
+    ResizeZone = 1000,
     UpdateLeds = 1050,
     UpdateZoneLeds = 1051,
     SetCustomMode = 1100,
+    UpdateMode = 1101,
 }
 
 public static class OpenRgbProtocol

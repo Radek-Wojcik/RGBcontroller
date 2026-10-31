@@ -38,7 +38,9 @@ public static class AppLogging
                 rollOnFileSizeLimit: true,
                 outputTemplate: OutputTemplate,
                 buffered: true,
-                flushToDiskInterval: TimeSpan.FromSeconds(1));
+                flushToDiskInterval: TimeSpan.FromSeconds(1),
+                // BOM so Windows PowerShell 5.1 (Get-Content) shows Polish system messages correctly.
+                encoding: new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
         if (alsoWriteToConsole)
         {
