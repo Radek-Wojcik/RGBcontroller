@@ -4,13 +4,13 @@ using StreamJsonRpc;
 
 namespace RGBcontroller.Service.Ipc;
 
-/// <summary>The command-line side of the control pipe: <c>--status</c> and <c>--profile &lt;name&gt;</c>.</summary>
+/// <summary>The command-line side of the control pipe: <c>--status</c>, <c>--profile</c> and <c>--group</c>.</summary>
 internal static class ControlClient
 {
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(3);
 
-    /// <param name="profile">Profile to activate, or null to only print the status.</param>
-    public static async Task<int> RunAsync(string? profile, string pipeName = IpcProtocol.ControlPipeName)
+    /// <param name="command">Change to make before printing the status, or null to only print it.</param>
+    public static async Task<int> RunAsync(Func<IServiceControl, Task<CommandResult>>? command, string pipeName = IpcProtocol.ControlPipeName)
     {
         await using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         try
@@ -36,9 +36,9 @@ internal static class ControlClient
                 return 1;
             }
 
-            if (profile is not null)
+            if (command is not null)
             {
-                var result = await service.SetActiveProfileAsync(profile, CancellationToken.None).ConfigureAwait(false);
+                var result = await command(service).ConfigureAwait(false);
                 if (!result.Success)
                 {
                     Console.Error.WriteLine(result.Message);

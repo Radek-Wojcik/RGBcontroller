@@ -24,7 +24,7 @@ public sealed class LightingConfigTests : IDisposable
         Assert.Equal(EffectKind.ColorCycle, rainbow.FindGroup(DefaultLighting.MouseGroup)!.Effect);
         Assert.Equal(EffectKind.ColorCycle, rainbow.FindGroup(DefaultLighting.GpuGroup)!.Effect);
         Assert.Equal(AmbilightMode.Screen, rainbow.Ambilight.Mode);
-        Assert.Equal(12, lighting.Groups.Single(g => g.Name == DefaultLighting.RamGroup).MaxFps);
+        Assert.Equal(5, lighting.Groups.Single(g => g.Name == DefaultLighting.RamGroup).MaxFps);
         Assert.Equal(10, lighting.Groups.Single(g => g.Name == DefaultLighting.GpuGroup).MaxFps);
     }
 

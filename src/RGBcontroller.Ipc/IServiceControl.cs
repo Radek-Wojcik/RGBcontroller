@@ -16,6 +16,9 @@ public interface IServiceControl
 
     /// <summary>Switches the active profile and saves it (since 1.1). Unknown names are rejected, not created.</summary>
     Task<CommandResult> SetActiveProfileAsync(string name, CancellationToken cancellationToken);
+
+    /// <summary>Changes a group's frame rate and its effect's speed, scale or brightness, applies and saves it (since 1.2).</summary>
+    Task<CommandResult> TuneGroupAsync(GroupTuningRequest request, CancellationToken cancellationToken);
 }
 
 public enum ClientKind
@@ -49,3 +52,7 @@ public sealed record ServiceStatus(ComponentState OpenRgb, ComponentState Strip,
 public sealed record ProfileList(IReadOnlyList<string> Profiles, string ActiveProfile);
 
 public sealed record CommandResult(bool Success, string? Message);
+
+/// <summary>Null fields stay unchanged. <paramref name="Profile"/> null means the active profile.</summary>
+public sealed record GroupTuningRequest(
+    string Group, string? Profile = null, int? MaxFps = null, double? Speed = null, double? Scale = null, int? BrightnessPercent = null);

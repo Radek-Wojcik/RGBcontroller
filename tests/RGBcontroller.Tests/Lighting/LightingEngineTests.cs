@@ -49,7 +49,7 @@ public sealed class LightingEngineTests
         }
 
         Assert.InRange(output.LedWrites[0], 58, 62); // keyboard 30 FPS
-        Assert.InRange(output.LedWrites[1], 23, 26); // RAM 12 FPS
+        Assert.InRange(output.LedWrites[1], 9, 11); // RAM 5 FPS
     }
 
     [Fact]
