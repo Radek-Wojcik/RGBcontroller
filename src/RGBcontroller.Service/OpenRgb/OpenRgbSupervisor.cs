@@ -1,6 +1,7 @@
 using RGBcontroller.Core.Config;
 using RGBcontroller.Core.OpenRgb;
 using RGBcontroller.Ipc;
+using RGBcontroller.Service.Lighting;
 using Serilog;
 
 namespace RGBcontroller.Service.OpenRgb;
@@ -31,7 +32,7 @@ public sealed record SupervisorTimings(TimeSpan HealthCheckInterval, TimeSpan St
 
 /// <summary>
 /// Keeps exactly one OpenRGB alive: removes strays on start, launches the pinned build, connects the SDK client,
-/// lights the devices, re-applies after DEVICE_LIST_UPDATED (rescans, hot-plug), health-checks the SDK and
+/// hands the devices to the effect engine, re-applies after DEVICE_LIST_UPDATED (rescans, hot-plug), health-checks the SDK and
 /// restarts with back-off when OpenRGB exits or stops answering. Never starts a second instance while one runs.
 /// </summary>
 internal sealed class OpenRgbSupervisor
@@ -40,7 +41,7 @@ internal sealed class OpenRgbSupervisor
 
     private readonly IOpenRgbLauncher _launcher;
     private readonly OpenRgbConfig _config;
-    private readonly LightingConfig _lighting;
+    private readonly IDeviceLightingSink _sink;
     private readonly StartupClock _clock;
     private readonly SupervisorTimings _timings;
     private readonly ILogger _log;
@@ -49,11 +50,11 @@ internal sealed class OpenRgbSupervisor
     private int _starts;
 
     public OpenRgbSupervisor(
-        IOpenRgbLauncher launcher, OpenRgbConfig config, LightingConfig lighting, StartupClock clock, ILogger log, SupervisorTimings? timings = null)
+        IOpenRgbLauncher launcher, OpenRgbConfig config, IDeviceLightingSink sink, StartupClock clock, ILogger log, SupervisorTimings? timings = null)
     {
         _launcher = launcher;
         _config = config;
-        _lighting = lighting;
+        _sink = sink;
         _clock = clock;
         _log = log.ForContext<OpenRgbSupervisor>();
         _timings = timings ?? SupervisorTimings.Default;
@@ -150,7 +151,7 @@ internal sealed class OpenRgbSupervisor
             client.Disconnected += cause => disconnected.TrySetResult(cause);
             client.DeviceListUpdated += SignalDeviceListChanged;
 
-            lighting = new DeviceLighting(client, _config, _lighting, _clock, _litDevices, _log);
+            lighting = new DeviceLighting(client, _config, _sink, _clock, _litDevices, _log);
             await lighting.ApplyAllAsync(stopToken).ConfigureAwait(false);
             State = ComponentState.Ok;
             DevicesApplied?.Invoke(lighting.Devices.Count);
@@ -178,6 +179,9 @@ internal sealed class OpenRgbSupervisor
                 if (first == changed)
                 {
                     changed = null;
+
+                    // Device indices are invalid until the list settles: stop writing right away.
+                    _sink.Detach();
                     await WaitForQuietDeviceListAsync(stopToken).ConfigureAwait(false);
                     _log.Information("Device list changed; re-applying lighting");
                     await lighting.ApplyAllAsync(stopToken).ConfigureAwait(false);
@@ -201,6 +205,7 @@ internal sealed class OpenRgbSupervisor
         }
         finally
         {
+            _sink.Detach();
             if (client is not null)
             {
                 client.DeviceListUpdated -= SignalDeviceListChanged;
@@ -238,11 +243,12 @@ internal sealed class OpenRgbSupervisor
     }
 
     /// <summary>
-    /// Sends black, then one round trip so OpenRGB has processed the writes, then a short grace period because
+    /// Stops the effect engine's writes, sends black, then one round trip so OpenRGB has processed the writes, then a short grace period because
     /// OpenRGB pushes LED updates to the hardware on per-device threads. Only then may the process be killed.
     /// </summary>
     private async Task BlackoutAsync(DeviceLighting lighting, OpenRgbSdkClient client)
     {
+        _sink.Detach();
         lighting.Blackout();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1.5));
         try
