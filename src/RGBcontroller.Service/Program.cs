@@ -2,6 +2,7 @@
 using RGBcontroller.Core;
 using RGBcontroller.Core.Config;
 using RGBcontroller.Core.Logging;
+using RGBcontroller.Service.Ipc;
 using Serilog;
 using Serilog.Events;
 
@@ -17,6 +18,8 @@ internal static class Program
                                  prompt and the Service stopped: it drives the hardware and replaces any OpenRGB.
           --probe [--rescan]     Read-only check of the running OpenRGB SDK server (spikes R2/R3);
                                  --rescan also asks OpenRGB to re-detect devices and times it.
+          --status               Show the running Service's state and its profiles (control pipe, no elevation).
+          --profile <name>       Switch the running Service to profile <name> and save it.
           --data-dir <folder>    Use <folder> instead of %ProgramData%\RGBcontroller.
         """;
 
@@ -26,6 +29,11 @@ internal static class Program
         {
             Console.Error.WriteLine(Usage);
             return 2;
+        }
+
+        if (options.Mode is Mode.Status or Mode.SetProfile)
+        {
+            return await ControlClient.RunAsync(options.Mode == Mode.SetProfile ? options.Profile : null).ConfigureAwait(false);
         }
 
         var paths = options.DataDir is null ? AppPaths.Default : new AppPaths(Path.GetFullPath(options.DataDir));
@@ -57,7 +65,9 @@ internal static class Program
             typeof(Program).Assembly.GetName().Version, console ? "console" : "service", paths.DataRoot);
         LogConfigLoad(log, store, load);
 
-        LightingHost CreateHost() => new(load.Config, paths, AppContext.BaseDirectory, logger);
+        // A rejected or too new file is never overwritten; the defaults then run in memory only.
+        var canSaveConfig = load.Outcome is not (ConfigLoadOutcome.InvalidUsingDefaults or ConfigLoadOutcome.TooNewUsingDefaults);
+        LightingHost CreateHost() => new(load.Config, store, canSaveConfig, paths, AppContext.BaseDirectory, logger);
 
         if (!console)
         {
@@ -104,15 +114,18 @@ internal static class Program
         None,
         Console,
         Probe,
+        Status,
+        SetProfile,
     }
 
-    private sealed record Options(Mode Mode, bool Rescan, string? DataDir);
+    private sealed record Options(Mode Mode, bool Rescan, string? DataDir, string? Profile = null);
 
     private static bool TryParse(string[] args, out Options options)
     {
         var mode = Mode.None;
         var rescan = false;
         string? dataDir = null;
+        string? profile = null;
         options = new Options(mode, rescan, dataDir);
         for (var i = 0; i < args.Length; i++)
         {
@@ -123,6 +136,13 @@ internal static class Program
                     break;
                 case "--probe" when mode == Mode.None:
                     mode = Mode.Probe;
+                    break;
+                case "--status" when mode == Mode.None:
+                    mode = Mode.Status;
+                    break;
+                case "--profile" when mode == Mode.None && i + 1 < args.Length:
+                    mode = Mode.SetProfile;
+                    profile = args[++i];
                     break;
                 case "--rescan":
                     rescan = true;
@@ -140,7 +160,7 @@ internal static class Program
             return false;
         }
 
-        options = new Options(mode, rescan, dataDir);
+        options = new Options(mode, rescan, dataDir, profile);
         return true;
     }
 }

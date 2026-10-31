@@ -1,18 +1,20 @@
 using RGBcontroller.Core;
 using RGBcontroller.Core.Config;
 using RGBcontroller.Core.OpenRgb;
+using RGBcontroller.Service.Lighting;
 using Serilog;
 
 namespace RGBcontroller.Service.OpenRgb;
 
 /// <summary>
-/// Stage 1 device lighting: re-reads every OpenRGB controller, applies configured zone sizes, switches it to
-/// Direct mode and writes one static color. Idempotent, so it is simply re-run whenever the device list changes.
+/// Reads every OpenRGB controller, applies the configured zone sizes (lost on every rescan) and hands the devices to
+/// the effect engine, which sets the modes and renders. Idempotent, so it is simply re-run whenever the device list
+/// changes.
 /// </summary>
 /// <param name="litDevices">Devices already lit since Service start (shared across OpenRGB restarts so
 /// "First light" is logged once per device, which is what spike R5 measures).</param>
 internal sealed class DeviceLighting(
-    OpenRgbSdkClient client, OpenRgbConfig openRgb, LightingConfig lighting, StartupClock clock, HashSet<string> litDevices, ILogger log)
+    OpenRgbSdkClient client, OpenRgbConfig openRgb, IDeviceLightingSink sink, StartupClock clock, HashSet<string> litDevices, ILogger log)
 {
     private readonly ILogger _log = log.ForContext<DeviceLighting>();
     private readonly HashSet<string> _litDevices = litDevices;
@@ -23,9 +25,6 @@ internal sealed class DeviceLighting(
 
     public async Task ApplyAllAsync(CancellationToken cancellationToken)
     {
-        RgbColor.TryParseHex(lighting.StaticColor, out var baseColor);
-        var color = baseColor.Scale(lighting.DeviceBrightnessPercent);
-
         var count = await client.GetControllerCountAsync(cancellationToken).ConfigureAwait(false);
         var devices = new List<ControllerData>(count);
         _ledCounts.Clear();
@@ -35,23 +34,12 @@ internal sealed class DeviceLighting(
             data = await ApplyZoneSizesAsync(index, data, cancellationToken).ConfigureAwait(false);
             devices.Add(data);
             _ledCounts.Add(data.Leds.Count);
+        }
 
-            var modeIndex = FindPerLedMode(data);
-            if (modeIndex < 0)
-            {
-                _log.Warning("{Device} has no Direct/Custom/Static per-LED mode; colors may not show", data.Name);
-            }
-            else
-            {
-                // UPDATEMODE, not SETCUSTOMMODE: only UpdateMode makes OpenRGB switch the hardware out of its
-                // power-on effect (RAM rainbow, GPU default after a cold boot).
-                client.UpdateMode(index, modeIndex, data.Modes[modeIndex]);
-            }
-
-            var colors = new RgbColor[data.Leds.Count];
-            colors.AsSpan().Fill(color);
-            client.UpdateLeds(index, colors);
-
+        Devices = devices;
+        sink.Attach(client, devices);
+        foreach (var data in devices)
+        {
             if (_litDevices.Add(data.Name + "|" + data.Location))
             {
                 _log.Information(
@@ -60,11 +48,11 @@ internal sealed class DeviceLighting(
             }
         }
 
-        Devices = devices;
-        _log.Information("Applied {Color} to {Count} OpenRGB devices", color, count);
+        _log.Information("Handed {Count} OpenRGB devices to the effect engine", count);
     }
 
-    /// <summary>Best-effort black on every known device (stop and shutdown paths). Uses cached LED counts, no round trips.</summary>
+    /// <summary>Best-effort black on every known device (stop and shutdown paths). Uses cached LED counts, no round trips.
+    /// Detach the engine first, or its next frame overwrites the black.</summary>
     public void Blackout()
     {
         for (var index = 0; index < _ledCounts.Count; index++)
@@ -112,26 +100,6 @@ internal sealed class DeviceLighting(
         return resized
             ? await client.GetControllerDataAsync(index, cancellationToken).ConfigureAwait(false)
             : data;
-    }
-
-    /// <summary>Same choice as RGBController::SetCustomMode: Direct, then Custom, then Static, with per-LED or mode-specific colors.</summary>
-    internal static int FindPerLedMode(ControllerData data)
-    {
-        const uint PerLed = 1;
-        const uint ModeSpecific = 2;
-        foreach (var name in (string[])["Direct", "Custom", "Static"])
-        {
-            for (var i = 0; i < data.Modes.Count; i++)
-            {
-                var mode = data.Modes[i];
-                if (mode.Name == name && mode.ColorMode is PerLed or ModeSpecific)
-                {
-                    return i;
-                }
-            }
-        }
-
-        return -1;
     }
 
     private static string Describe(ControllerData data) =>

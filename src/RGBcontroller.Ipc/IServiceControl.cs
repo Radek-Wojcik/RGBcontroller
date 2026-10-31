@@ -10,12 +10,21 @@ public interface IServiceControl
     Task<HelloResponse> HelloAsync(HelloRequest request, CancellationToken cancellationToken);
 
     Task<ServiceStatus> GetStatusAsync(CancellationToken cancellationToken);
+
+    /// <summary>Profile names in config order and the active one (since 1.1).</summary>
+    Task<ProfileList> GetProfilesAsync(CancellationToken cancellationToken);
+
+    /// <summary>Switches the active profile and saves it (since 1.1). Unknown names are rejected, not created.</summary>
+    Task<CommandResult> SetActiveProfileAsync(string name, CancellationToken cancellationToken);
 }
 
 public enum ClientKind
 {
     Agent,
     UI,
+
+    /// <summary>The Service executable's command-line switches (--status, --profile).</summary>
+    Cli,
 }
 
 public sealed record HelloRequest(ClientKind Client, ProtocolVersion ProtocolVersion, string AppVersion);
@@ -35,4 +44,8 @@ public enum ComponentState
     Offline,
 }
 
-public sealed record ServiceStatus(ComponentState OpenRgb, ComponentState Strip, string? Detail);
+public sealed record ServiceStatus(ComponentState OpenRgb, ComponentState Strip, string? Detail, string? ActiveProfile = null);
+
+public sealed record ProfileList(IReadOnlyList<string> Profiles, string ActiveProfile);
+
+public sealed record CommandResult(bool Success, string? Message);

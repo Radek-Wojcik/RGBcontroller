@@ -103,5 +103,11 @@ public sealed class IpcContractTests
 
         public Task<ServiceStatus> GetStatusAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new ServiceStatus(ComponentState.Ok, ComponentState.Degraded, "COM3 reconnecting"));
+
+        public Task<ProfileList> GetProfilesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new ProfileList(["Rainbow"], "Rainbow"));
+
+        public Task<CommandResult> SetActiveProfileAsync(string name, CancellationToken cancellationToken) =>
+            Task.FromResult(new CommandResult(true, null));
     }
 }
