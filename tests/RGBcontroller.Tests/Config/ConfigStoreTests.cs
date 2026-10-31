@@ -21,7 +21,7 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Equal(ConfigLoadOutcome.CreatedDefault, result.Outcome);
         Assert.Equal(AppConfig.CreateDefault(), result.Config);
         Assert.True(File.Exists(ConfigPath));
-        Assert.Contains("\"schemaVersion\": 1", File.ReadAllText(ConfigPath));
+        Assert.Contains("\"schemaVersion\": 2", File.ReadAllText(ConfigPath));
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class ConfigStoreTests : IDisposable
     [Fact]
     public void Load_MissingSections_FallBackToDefaults()
     {
-        File.WriteAllText(ConfigPath, """{ "schemaVersion": 1, "strip": { "ledCount": 60 } }""");
+        File.WriteAllText(ConfigPath, """{ "schemaVersion": 2, "strip": { "ledCount": 60 } }""");
 
         var result = new ConfigStore(ConfigPath).Load();
 
@@ -76,7 +76,7 @@ public sealed class ConfigStoreTests : IDisposable
         File.WriteAllText(ConfigPath, """
             {
               // hand edited
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "strip": { "maxFps": 25, },
             }
             """);
@@ -106,11 +106,11 @@ public sealed class ConfigStoreTests : IDisposable
     }
 
     [Theory]
-    [InlineData("""{ "schemaVersion": 1, "strip": { "ledCount": 0 } }""")]
-    [InlineData("""{ "schemaVersion": 1, "strip": { "ledCount": "many" } }""")]
-    [InlineData("""{ "schemaVersion": 1, "strip": null }""")]
-    [InlineData("""{ "schemaVersion": 1, "openRgb": { "host": "192.168.1.10" } }""")]
-    [InlineData("""{ "schemaVersion": 1, "strip": { "colorOrder": "Purple" } }""")]
+    [InlineData("""{ "schemaVersion": 2, "strip": { "ledCount": 0 } }""")]
+    [InlineData("""{ "schemaVersion": 2, "strip": { "ledCount": "many" } }""")]
+    [InlineData("""{ "schemaVersion": 2, "strip": null }""")]
+    [InlineData("""{ "schemaVersion": 2, "openRgb": { "host": "192.168.1.10" } }""")]
+    [InlineData("""{ "schemaVersion": 2, "strip": { "colorOrder": "Purple" } }""")]
     public void Load_InvalidValues_UseDefaultsAndKeepFile(string content)
     {
         File.WriteAllText(ConfigPath, content);
