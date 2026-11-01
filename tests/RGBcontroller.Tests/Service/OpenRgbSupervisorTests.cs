@@ -140,6 +140,32 @@ public sealed class OpenRgbSupervisorTests
     }
 
     [Fact]
+    public async Task Resume_WaitsForAllDevicesBeforeLighting()
+    {
+        // O4: a real rescan reports devices in bursts (0, then 2, then 5); lighting must start once, with all of them.
+        var keyboard = ControllerDataWriter.Keyboard();
+        var mouse = ControllerDataWriter.Mouse();
+        await using var server = new FakeOpenRgbServer(5, keyboard, mouse);
+        await using var run = Start(server, out var supervisor, out _);
+        var applied = new System.Collections.Concurrent.ConcurrentQueue<int>();
+        await WaitUntilAsync(() => server.UpdateModeRequests.Count == 2);
+        supervisor.DevicesApplied += applied.Enqueue;
+
+        server.Controllers = [keyboard];
+        supervisor.NotifyResumed();
+        await WaitUntilAsync(() => Volatile.Read(ref server.RescanRequests) == 1);
+        await Task.Delay(400, TestContext.Current.CancellationToken);
+        Assert.Empty(applied);
+
+        server.Controllers = [keyboard, mouse];
+        await server.NotifyDeviceListUpdatedAsync();
+
+        await WaitUntilAsync(() => !applied.IsEmpty);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.Equal([2], applied);
+    }
+
+    [Fact]
     public async Task OpenRgbExit_RestartsOnceAndRelights()
     {
         await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard());
