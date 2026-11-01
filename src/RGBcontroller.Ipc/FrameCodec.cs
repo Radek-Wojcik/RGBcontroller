@@ -9,6 +9,9 @@ public enum FrameType : byte
 
     /// <summary>Service to UI: live preview of all device LEDs.</summary>
     Preview = 2,
+
+    /// <summary>Agent to Service: the screen cannot be captured, show the fallback mode until colors arrive again. No payload.</summary>
+    CaptureUnavailable = 3,
 }
 
 public readonly record struct FrameHeader(FrameType Type, uint Sequence, int PayloadLength);
@@ -59,7 +62,7 @@ public static class FrameCodec
         }
 
         var type = (FrameType)source[5];
-        if (type is not (FrameType.StripColors or FrameType.Preview))
+        if (type is not (FrameType.StripColors or FrameType.Preview or FrameType.CaptureUnavailable))
         {
             return false;
         }
