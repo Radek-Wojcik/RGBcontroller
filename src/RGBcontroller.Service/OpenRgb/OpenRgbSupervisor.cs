@@ -56,6 +56,8 @@ internal sealed class OpenRgbSupervisor
     private readonly HashSet<string> _litDevices = [];
     private int _starts;
 
+    private ComponentState _state = ComponentState.Unknown;
+
     public OpenRgbSupervisor(
         IOpenRgbLauncher launcher, OpenRgbConfig config, IDeviceLightingSink sink, StartupClock clock, ILogger log, SupervisorTimings? timings = null)
     {
@@ -67,7 +69,21 @@ internal sealed class OpenRgbSupervisor
         _timings = timings ?? SupervisorTimings.Default;
     }
 
-    public ComponentState State { get; private set; } = ComponentState.Unknown;
+    public ComponentState State
+    {
+        get => _state;
+        private set
+        {
+            if (_state != value)
+            {
+                _state = value;
+                StateChanged?.Invoke(value);
+            }
+        }
+    }
+
+    /// <summary>Raised on the supervisor's thread whenever <see cref="State"/> changes (tray icon).</summary>
+    public event Action<ComponentState>? StateChanged;
 
     /// <summary>Number of OpenRGB launches so far (1 = no restart).</summary>
     public int Starts => Volatile.Read(ref _starts);

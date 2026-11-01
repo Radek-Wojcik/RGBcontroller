@@ -1,4 +1,5 @@
 using RGBcontroller.Core;
+using RGBcontroller.Core.Ambilight;
 using RGBcontroller.Core.Config;
 using RGBcontroller.Core.Lighting;
 using RGBcontroller.Core.OpenRgb;
@@ -35,10 +36,11 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
     private readonly Timer _resend;
     private int _resendStep;
 
-    public LightingController(LightingConfig config, StripWriter? strip, int stripLedCount, ILogger log)
+    public LightingController(LightingConfig config, StripWriter? strip, StripConfig stripConfig, ILogger log)
     {
         _output = new HardwareOutput(strip, log);
-        _engine = new LightingEngine(config, strip is null ? 0 : stripLedCount, strip?.EffectiveMaxFps ?? 30, log);
+        _engine = new LightingEngine(config, strip is null ? 0 : stripConfig.LedCount, strip?.EffectiveMaxFps ?? 30, log,
+            new StripLayout(stripConfig.Layout, stripConfig.LedCount));
         _loop = new RenderLoop(_engine, _output, log);
         _resend = new Timer(_ => OnResend());
     }
@@ -59,6 +61,32 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
     {
         _engine.SetSituation(situation);
         _loop.Wake();
+    }
+
+    /// <inheritdoc cref="LightingEngine.IsScreenWanted"/>
+    public bool IsScreenWanted => _engine.IsScreenWanted;
+
+    /// <summary>Everything off or back on (tray, hotkey).</summary>
+    public void SetAllOff(bool off)
+    {
+        _engine.SetAllOff(off);
+        _loop.Wake();
+    }
+
+    /// <summary>The Agent started (true) or stopped (false) delivering screen colors.</summary>
+    public void SetScreenFeed(bool live)
+    {
+        _engine.SetScreenFeed(live);
+        _loop.Wake();
+    }
+
+    /// <summary>Screen colors from the Agent's frame pipe; written to the strip on the render thread.</summary>
+    public void PushScreenFrame(ReadOnlySpan<RgbColor> colors)
+    {
+        if (_engine.PushScreenFrame(colors))
+        {
+            _loop.Wake();
+        }
     }
 
     /// <summary>Sends black to everything and waits (bounded) until the frame is out; the PC is about to sleep.</summary>

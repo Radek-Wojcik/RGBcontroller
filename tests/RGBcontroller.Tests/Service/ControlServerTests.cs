@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using RGBcontroller.Core.Config;
 using RGBcontroller.Ipc;
 using RGBcontroller.Service.Ipc;
 using Serilog.Core;
@@ -74,8 +75,82 @@ public sealed class ControlServerTests
         Assert.NotNull(hello.Message);
     }
 
+    [Fact]
+    public async Task SubscribedClients_ReceiveStateChanges()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pipeName = "RGBcontroller.Test." + Guid.NewGuid().ToString("N");
+        var host = new FakeHost();
+        await using var server = new ControlServer(pipeName, subscription => new ServiceControlEndpoint(host, subscription), Logger.None);
+        server.Start();
+
+        await using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await pipe.ConnectAsync(5000, ct);
+        using var rpc = IpcRpc.CreateConnection(pipe);
+        var events = new EventSink();
+        rpc.AddLocalRpcTarget<IServiceEvents>(events, null);
+        var service = rpc.Attach<IServiceControl>();
+        rpc.StartListening();
+
+        server.Broadcast(host.GetAgentState());
+        var first = await service.SubscribeAsync(ct);
+        Assert.Equal("Rainbow", first.ActiveProfile);
+
+        host.SetAllOff(true);
+        server.Broadcast(host.GetAgentState());
+        var pushed = await events.Next.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+
+        Assert.True(pushed.AllOff);
+        Assert.True(pushed.Sequence > first.Sequence);
+        Assert.Equal(AmbilightMode.Screen, pushed.StripMode);
+    }
+
+    [Fact]
+    public async Task Endpoint_ValidatesStripChanges()
+    {
+        var host = new FakeHost();
+        var endpoint = new ServiceControlEndpoint(host);
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.False((await endpoint.ChangeStripAsync(new StripChangeRequest(BrightnessPercent: 101), ct)).Success);
+        Assert.False((await endpoint.ChangeStripAsync(new StripChangeRequest(Mode: (AmbilightMode)42), ct)).Success);
+        Assert.False((await endpoint.StepProfileAsync(1000, ct)).Success);
+        Assert.Null(host.LastStripChange);
+
+        Assert.True((await endpoint.ChangeStripAsync(new StripChangeRequest(BrightnessDelta: -10), ct)).Success);
+        Assert.Equal(new StripChangeRequest(BrightnessDelta: -10), host.LastStripChange);
+    }
+
+    private sealed class EventSink : IServiceEvents
+    {
+        public TaskCompletionSource<AgentState> Next { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void StateChanged(AgentState state) => Next.TrySetResult(state);
+    }
+
     private sealed class FakeHost : IControllableHost
     {
+        private long _sequence;
+
+        public bool AllOff { get; private set; }
+
+        public StripChangeRequest? LastStripChange { get; private set; }
+
+        public AgentState GetAgentState() =>
+            new(++_sequence, GetStatus(), _profiles, Active, Active, AmbilightMode.Screen, 50, CaptureWanted: true, AllOff);
+
+        public AgentSettings GetAgentSettings() => new(113, new StripLayoutConfig(), new ScreenCaptureConfig(), new HotkeysConfig());
+
+        public string? ChangeStrip(StripChangeRequest request)
+        {
+            LastStripChange = request;
+            return null;
+        }
+
+        public void SetAllOff(bool off) => AllOff = off;
+
+        public string? StepProfile(int delta) => null;
+
         private readonly string[] _profiles = ["Rainbow", "Night"];
 
         public string Active { get; private set; } = "Rainbow";

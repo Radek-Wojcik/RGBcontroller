@@ -14,10 +14,28 @@ internal interface IControllableHost
 
     /// <returns>Null on success, otherwise a message for the client.</returns>
     string? TuneGroup(GroupTuningRequest request);
+
+    AgentState GetAgentState();
+
+    AgentSettings GetAgentSettings();
+
+    /// <returns>Null on success, otherwise a message for the client.</returns>
+    string? ChangeStrip(StripChangeRequest request);
+
+    void SetAllOff(bool off);
+
+    /// <returns>Null on success, otherwise a message for the client.</returns>
+    string? StepProfile(int delta);
 }
 
-/// <summary>Validates IPC input and forwards it to the host. Runs on StreamJsonRpc threads.</summary>
-internal sealed class ServiceControlEndpoint(IControllableHost host) : IServiceControl
+/// <summary>The control connection a request arrived on; subscribing makes the server push state changes to it.</summary>
+internal interface IStateSubscription
+{
+    void Subscribe();
+}
+
+/// <summary>Validates IPC input and forwards it to the host. One instance per connection; runs on StreamJsonRpc threads.</summary>
+internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubscription? subscription = null) : IServiceControl
 {
     public const int MaxNameLength = 100;
 
@@ -70,4 +88,46 @@ internal sealed class ServiceControlEndpoint(IControllableHost host) : IServiceC
     }
 
     private static bool IsName(string? name) => !string.IsNullOrWhiteSpace(name) && name.Length <= MaxNameLength;
+
+    public Task<AgentState> SubscribeAsync(CancellationToken cancellationToken)
+    {
+        subscription?.Subscribe();
+        return Task.FromResult(host.GetAgentState());
+    }
+
+    public Task<AgentSettings> GetAgentSettingsAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetAgentSettings());
+
+    public Task<CommandResult> ChangeStripAsync(StripChangeRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Mode is { } mode && !Enum.IsDefined(mode))
+        {
+            return Task.FromResult(new CommandResult(false, $"Unknown strip mode {mode}."));
+        }
+
+        if (request.BrightnessPercent is < 0 or > 100 || request.BrightnessDelta is < -100 or > 100)
+        {
+            return Task.FromResult(new CommandResult(false, "Brightness is 0-100 and a step -100 to 100."));
+        }
+
+        var error = host.ChangeStrip(request);
+        return Task.FromResult(new CommandResult(error is null, error));
+    }
+
+    public Task<CommandResult> SetAllOffAsync(bool off, CancellationToken cancellationToken)
+    {
+        host.SetAllOff(off);
+        return Task.FromResult(new CommandResult(true, null));
+    }
+
+    public Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken)
+    {
+        if (delta is < -100 or > 100)
+        {
+            return Task.FromResult(new CommandResult(false, "A profile step is -100 to 100."));
+        }
+
+        var error = host.StepProfile(delta);
+        return Task.FromResult(new CommandResult(error is null, error));
+    }
 }
