@@ -179,6 +179,27 @@ public sealed class LightingEngineTests
     }
 
     [Fact]
+    public void Blackout_SendsBlackOnceThenReturnsToTheProfile()
+    {
+        var engine = Engine(Config(DefaultLighting.RainbowProfile), stripLeds: 113);
+        engine.SetDevices([Keyboard]);
+        var output = new RecordingOutput();
+        engine.Render(TimeSpan.Zero, output);
+
+        engine.SetBlackout(true);
+        Assert.Null(engine.Render(TimeSpan.FromSeconds(1), output));
+        Assert.All(output.Leds[0], c => Assert.Equal(RgbColor.Black, c));
+        Assert.All(output.Strip, c => Assert.Equal(RgbColor.Black, c));
+        var writes = output.LedWrites[0];
+        Assert.Null(engine.Render(TimeSpan.FromSeconds(2), output));
+        Assert.Equal(writes, output.LedWrites[0]);
+
+        engine.SetBlackout(false);
+        Assert.NotNull(engine.Render(TimeSpan.FromSeconds(3), output));
+        Assert.Contains(output.Leds[0], c => c != RgbColor.Black);
+    }
+
+    [Fact]
     public void Render_DoesNotAllocate()
     {
         var engine = Engine(Config(DefaultLighting.RainbowProfile), stripLeds: 113);

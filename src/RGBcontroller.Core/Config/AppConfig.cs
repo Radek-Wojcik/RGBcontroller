@@ -79,6 +79,9 @@ public sealed record OpenRgbConfig
     /// <summary>Quiet period after a DEVICE_LIST_UPDATED notice before devices are re-read and lit.</summary>
     public int DeviceSettleMilliseconds { get; set; } = 500;
 
+    /// <summary>After resume from sleep, USB devices re-enumerate; wait this long before OpenRGB rescans (SPEC 4).</summary>
+    public int ResumeRescanDelayMilliseconds { get; set; } = 3000;
+
     /// <summary>LED counts for resizable zones (ARGB headers). Applied through the SDK after detection.</summary>
     public IReadOnlyList<ZoneSizeConfig> ZoneSizes { get; set; } =
     [
@@ -95,6 +98,7 @@ public sealed record OpenRgbConfig
         && MinimumUptimeSeconds == other.MinimumUptimeSeconds
         && StartupTimeoutSeconds == other.StartupTimeoutSeconds
         && DeviceSettleMilliseconds == other.DeviceSettleMilliseconds
+        && ResumeRescanDelayMilliseconds == other.ResumeRescanDelayMilliseconds
         && ListEquality.Equal(ZoneSizes, other.ZoneSizes);
 
     public override int GetHashCode() => HashCode.Combine(ExecutablePath, Host, Port, ZoneSizes.Count);

@@ -25,6 +25,7 @@ internal sealed class RgbControllerService : ServiceBase
         ServiceName = Name;
         CanStop = true;
         CanShutdown = true;
+        CanHandlePowerEvent = true;
         AutoLog = false;
     }
 
@@ -42,6 +43,22 @@ internal sealed class RgbControllerService : ServiceBase
     }
 
     protected override void OnShutdown() => StopHost(ShutdownTimeout);
+
+    protected override bool OnPowerEvent(PowerBroadcastStatus powerStatus)
+    {
+        var host = _host;
+        switch (powerStatus)
+        {
+            case PowerBroadcastStatus.Suspend:
+                host?.OnSuspend();
+                break;
+            case PowerBroadcastStatus.ResumeAutomatic or PowerBroadcastStatus.ResumeSuspend or PowerBroadcastStatus.ResumeCritical:
+                host?.OnResume(powerStatus.ToString());
+                break;
+        }
+
+        return true;
+    }
 
     private void StopHost(TimeSpan timeout)
     {

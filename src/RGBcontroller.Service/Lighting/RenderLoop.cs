@@ -17,10 +17,13 @@ internal sealed class RenderLoop : IDisposable
     private readonly ILightingOutput _output;
     private readonly ILogger _log;
     private readonly AutoResetEvent _wake = new(false);
+    private readonly AutoResetEvent _rendered = new(false);
     private readonly HighResolutionTimer _timer = new();
     private readonly Stopwatch _clock = new();
     private Thread? _thread;
     private volatile bool _stopping;
+    private long _requested;
+    private long _completed;
 
     public RenderLoop(LightingEngine engine, ILightingOutput output, ILogger log)
     {
@@ -45,6 +48,28 @@ internal sealed class RenderLoop : IDisposable
     /// <summary>Renders again now; call after changing the engine's profile or devices.</summary>
     public void Wake() => _wake.Set();
 
+    /// <summary>
+    /// Renders now and waits until that frame has been handed to the outputs (suspend: black must go out before the
+    /// system sleeps). A frame that was already in progress when this was called does not count.
+    /// </summary>
+    /// <returns>False on timeout or when the loop is not running.</returns>
+    public bool RenderNow(TimeSpan timeout)
+    {
+        var request = Interlocked.Increment(ref _requested);
+        _wake.Set();
+        var deadline = Stopwatch.GetTimestamp() + (long)(timeout.TotalSeconds * Stopwatch.Frequency);
+        while (Interlocked.Read(ref _completed) < request)
+        {
+            var remaining = deadline - Stopwatch.GetTimestamp();
+            if (_thread is null || remaining <= 0 || !_rendered.WaitOne(TimeSpan.FromSeconds((double)remaining / Stopwatch.Frequency)))
+            {
+                return Interlocked.Read(ref _completed) >= request;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>Stops the thread after the frame in progress. No frames are written afterwards.</summary>
     public void Stop()
     {
@@ -57,6 +82,7 @@ internal sealed class RenderLoop : IDisposable
     {
         Stop();
         _wake.Dispose();
+        _rendered.Dispose();
         _timer.Dispose();
     }
 
@@ -67,6 +93,7 @@ internal sealed class RenderLoop : IDisposable
         while (!_stopping)
         {
             TimeSpan? next;
+            var serving = Interlocked.Read(ref _requested);
             try
             {
                 next = _engine.Render(_clock.Elapsed, _output);
@@ -77,6 +104,8 @@ internal sealed class RenderLoop : IDisposable
                 next = ErrorRetry;
             }
 
+            Interlocked.Exchange(ref _completed, serving);
+            _rendered.Set();
             if (_stopping)
             {
                 break;

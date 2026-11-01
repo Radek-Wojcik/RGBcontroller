@@ -118,6 +118,28 @@ public sealed class OpenRgbSupervisorTests
     }
 
     [Fact]
+    public async Task Resume_RescansInTheSameOpenRgbAndResendsModes()
+    {
+        // After sleep the RAM ran its own rainbow (blinking against our frames) and the GPU stayed dark until the
+        // modes were pushed again.
+        await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard(), ControllerDataWriter.Mouse());
+        await using var run = Start(server, out var supervisor, out var launcher);
+        var applied = 0;
+        supervisor.DevicesApplied += _ => Interlocked.Increment(ref applied);
+        await WaitUntilAsync(() => server.UpdateModeRequests.Count == 2);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        var appliedBefore = Volatile.Read(ref applied);
+
+        supervisor.NotifyResumed();
+
+        await WaitUntilAsync(() => Volatile.Read(ref applied) == appliedBefore + 1 && server.UpdateModeRequests.Count == 4);
+        Assert.Equal(1, Volatile.Read(ref server.RescanRequests));
+        Assert.Equal(1, launcher.Starts);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.Equal(appliedBefore + 1, Volatile.Read(ref applied));
+    }
+
+    [Fact]
     public async Task OpenRgbExit_RestartsOnceAndRelights()
     {
         await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard());
@@ -184,7 +206,7 @@ public sealed class OpenRgbSupervisorTests
         FakeOpenRgbServer server, out OpenRgbSupervisor supervisor, out FakeLauncher launcher, SupervisorTimings? timings = null)
     {
         launcher = new FakeLauncher();
-        var config = new OpenRgbConfig { Port = server.Port, DeviceSettleMilliseconds = 100 };
+        var config = new OpenRgbConfig { Port = server.Port, DeviceSettleMilliseconds = 100, ResumeRescanDelayMilliseconds = 50 };
         var lighting = new LightingController(StaticCyan, strip: null, stripLedCount: 0, Logger.None);
         lighting.Start();
         supervisor = new OpenRgbSupervisor(launcher, config, lighting, new StartupClock(), Logger.None, timings ?? FastTimings);
