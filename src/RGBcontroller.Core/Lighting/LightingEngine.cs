@@ -29,6 +29,15 @@ public sealed class LightingEngine
 {
     private const int DefaultFps = 30;
 
+    /// <summary>
+    /// A static frame is sent this many extra times. OpenRGB pushes some devices in several USB packets (the Razer
+    /// keyboard row by row) and a lost packet left the F-key row lit after "turn off"; animations heal on the next frame.
+    /// The strip writer has its own keep-alive.
+    /// </summary>
+    private const int StaticRepeats = 2;
+
+    private static readonly TimeSpan StaticRepeatInterval = TimeSpan.FromMilliseconds(250);
+
     /// <summary>Everything off, strip included; used while the PC sleeps.</summary>
     private static readonly ProfileConfig BlackoutProfile = new() { Name = "(blackout)", Ambilight = new() { Mode = AmbilightMode.Off } };
 
@@ -153,7 +162,12 @@ public sealed class LightingEngine
 
                 if (target.Dirty || (target.Animated && now >= target.NextDue))
                 {
-                    RenderTarget(target, seconds, output);
+                    if (RenderTarget(target, seconds, output) && !target.Animated && target.DeviceIndex != Target.Strip)
+                    {
+                        target.PendingRepeats = StaticRepeats;
+                        target.NextDue = now + StaticRepeatInterval;
+                    }
+
                     if (target.Animated)
                     {
                         target.NextDue += target.Interval;
@@ -163,8 +177,14 @@ public sealed class LightingEngine
                         }
                     }
                 }
+                else if (target.PendingRepeats > 0 && now >= target.NextDue)
+                {
+                    output.SetDeviceLeds(target.DeviceIndex, target.Sent);
+                    target.PendingRepeats--;
+                    target.NextDue = now + StaticRepeatInterval;
+                }
 
-                if (target.Animated)
+                if (target.Animated || target.PendingRepeats > 0)
                 {
                     var wait = target.NextDue - now;
                     next = next is null || wait < next ? wait : next;
@@ -175,7 +195,8 @@ public sealed class LightingEngine
         }
     }
 
-    private static void RenderTarget(Target target, double seconds, ILightingOutput output)
+    /// <returns>True when the frame was sent (it differed from the last one or the target is new).</returns>
+    private static bool RenderTarget(Target target, double seconds, ILightingOutput output)
     {
         var buffer = target.Buffer.AsSpan();
         foreach (var binding in target.Bindings)
@@ -193,7 +214,7 @@ public sealed class LightingEngine
 
         if (!target.Dirty && buffer.SequenceEqual(target.Sent))
         {
-            return;
+            return false;
         }
 
         if (target.DeviceIndex == Target.Strip)
@@ -207,6 +228,7 @@ public sealed class LightingEngine
 
         buffer.CopyTo(target.Sent);
         target.Dirty = false;
+        return true;
     }
 
     private Target[] Build(TimeSpan now)
@@ -397,6 +419,9 @@ public sealed class LightingEngine
         public bool Dirty { get; set; } = true;
 
         public TimeSpan NextDue { get; set; }
+
+        /// <summary>Static targets: extra sends of <see cref="Sent"/> still due (see <see cref="StaticRepeats"/>).</summary>
+        public int PendingRepeats { get; set; }
 
         public string Describe() => Animated ? $"{Name} @{Math.Round(1 / Interval.TotalSeconds)} fps" : $"{Name} (static)";
     }

@@ -101,7 +101,7 @@ public sealed class OpenRgbSupervisorTests
         var applied = 0;
         supervisor.DevicesApplied += _ => Interlocked.Increment(ref applied);
         await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await Task.Delay(800, TestContext.Current.CancellationToken); // static frame plus its two repeats
         var appliedBefore = Volatile.Read(ref applied);
         var updatesBefore = server.LedUpdates.Count;
 
@@ -112,9 +112,9 @@ public sealed class OpenRgbSupervisorTests
         await server.NotifyDeviceListUpdatedAsync();
 
         await WaitUntilAsync(() => server.LastColors.ContainsKey(1));
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+        await Task.Delay(800, TestContext.Current.CancellationToken);
         Assert.Equal(appliedBefore + 1, Volatile.Read(ref applied));
-        Assert.Equal(updatesBefore + 2, server.LedUpdates.Count);
+        Assert.Equal(updatesBefore + 2 * 3, server.LedUpdates.Count);
     }
 
     [Fact]
