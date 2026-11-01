@@ -8,10 +8,18 @@ namespace RGBcontroller.Agent;
 
 /// <summary>
 /// The per-user Agent (SPEC 3): tray icon, global hotkeys and the Screen mode capture. It never touches hardware;
-/// strip colors and commands go to the Service over IPC.
+/// strip colors and commands go to the Service over IPC. One instance per user session.
 /// </summary>
 internal static class Program
 {
+    private const string Usage = """
+        RGBcontroller.Agent
+
+          (no arguments)                        Tray icon, hotkeys and screen capture for this user session.
+          --capture-probe <seconds> <folder>    Run the screen pipeline without the Service and write a report
+                                                and a snapshot with the sampled bands into <folder>.
+        """;
+
     [STAThread]
     private static int Main(string[] args)
     {
@@ -19,15 +27,35 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         using var logger = AppLogging.CreateLogger("agent", AppPaths.UserLogDirectory);
         var log = logger.ForContext(typeof(Program));
-        log.Information("RGBcontroller.Agent {Version} starting", typeof(Program).Assembly.GetName().Version);
 
         if (args.Length == 3 && args[0] == "--capture-probe" && int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds))
         {
+            // Read-only: the config belongs to the Service; users may read it.
             var paths = AppPaths.Default;
             var config = File.Exists(paths.ConfigFile) ? new ConfigStore(paths.ConfigFile).Load().Config : AppConfig.CreateDefault();
             return CaptureProbe.Run(seconds, args[2], config, logger);
         }
 
+        if (args.Length > 0)
+        {
+            MessageBox.Show(Usage, "RGBcontroller.Agent", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return 2;
+        }
+
+        using var single = new Mutex(initiallyOwned: true, @"Local\RGBcontroller.Agent", out var first);
+        if (!first)
+        {
+            log.Information("Another Agent already runs in this session; exiting");
+            return 0;
+        }
+
+        log.Information("RGBcontroller.Agent {Version} starting", typeof(Program).Assembly.GetName().Version);
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        Application.ThreadException += (_, e) => log.Error(e.Exception, "Unhandled UI exception");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => log.Fatal(e.ExceptionObject as Exception, "Unhandled exception");
+        using var context = new AgentApplication(logger);
+        Application.Run(context);
         return 0;
     }
 }
