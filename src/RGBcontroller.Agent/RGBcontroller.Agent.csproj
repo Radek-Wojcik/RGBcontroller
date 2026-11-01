@@ -4,11 +4,27 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- DuplicateOutput1 (HDR capture) requires a per-monitor DPI aware process. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D11" />
+    <PackageReference Include="Vortice.DXGI" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\RGBcontroller.Core\RGBcontroller.Core.csproj" />
     <ProjectReference Include="..\RGBcontroller.Ipc\RGBcontroller.Ipc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\RGBcontroller.Service\Hardware\HighResolutionTimer.cs" Link="Shared\HighResolutionTimer.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RGBcontroller.Tests" />
   </ItemGroup>
 
 </Project>
