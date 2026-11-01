@@ -116,6 +116,7 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
         var reportedUnavailable = false;
         var nextCapture = TimeSpan.Zero;
         var lastStep = TimeSpan.Zero;
+        var nextStep = TimeSpan.Zero;
         _clock.Restart();
         try
         {
@@ -158,19 +159,22 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
                     if (outcome == CaptureOutcome.Frame)
                     {
                         Interlocked.Increment(ref _frames);
-                        nextCapture = _now + captureInterval;
                         lostSince = null;
                         reportedUnavailable = false;
                         if (settled)
                         {
+                            // Waking from idle: smooth from now on, starting with this frame.
                             lastStep = _now;
+                            nextStep = _now;
                         }
                     }
+
+                    // Never poll the desktop faster than the capture rate; when idle, block again right away.
+                    nextCapture = outcome == CaptureOutcome.NoChange && settled ? _now : _now + captureInterval;
                 }
 
                 if (_pipeline!.IsSettled)
                 {
-                    lastStep = _now;
                     if (_now < nextCapture)
                     {
                         timer.Arm(nextCapture - _now);
@@ -180,16 +184,24 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
                     continue;
                 }
 
-                if (_pipeline.Step(_now - lastStep))
+                if (_now >= nextStep)
                 {
-                    _output.SendColors(_pipeline.Output);
-                    Interlocked.Increment(ref _sent);
+                    if (_pipeline.Step(_now - lastStep))
+                    {
+                        _output.SendColors(_pipeline.Output);
+                        Interlocked.Increment(ref _sent);
+                    }
+
+                    lastStep = _now;
+                    nextStep = _now + outputInterval;
                 }
 
-                lastStep = _now;
-                var next = _now + outputInterval;
-                timer.Arm((next < nextCapture || _pipeline.IsSettled ? next : nextCapture) - _now);
-                WaitHandle.WaitAny(waits);
+                var due = _pipeline.IsSettled || nextCapture < nextStep ? nextCapture : nextStep;
+                if (due > _now)
+                {
+                    timer.Arm(due - _now);
+                    WaitHandle.WaitAny(waits);
+                }
             }
         }
         catch (Exception ex)
