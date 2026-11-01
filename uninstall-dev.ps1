@@ -3,7 +3,8 @@
     Removes the development install made by install-dev.ps1 and restores the previous OpenRGB autostart.
 
 .DESCRIPTION
-    Run from an elevated PowerShell. Stops the service (lights go black), deletes the service registration,
+    Run from an elevated PowerShell. Stops the Agent and removes its logon autostart (HKCU Run value),
+    stops the service (lights go black), deletes the service registration,
     removes C:\Program Files\RGBcontroller, re-enables the OpenRGB autostart task if it was enabled before
     and starts it again so the old setup is back immediately. Config and logs in %ProgramData%\RGBcontroller
     are kept unless -RemoveData is given.
@@ -24,6 +25,16 @@ $dataDir = Join-Path $env:ProgramData 'RGBcontroller'
 $stateFile = Join-Path $dataDir 'dev-install\state.json'
 
 function Step($text) { Write-Host "==> $text" -ForegroundColor Cyan }
+
+foreach ($p in Get-Process RGBcontroller.Agent -ErrorAction SilentlyContinue) {
+    Step "Stopping the Agent pid $($p.Id)"
+    Stop-Process -Id $p.Id -Force
+}
+$runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+if (Get-ItemProperty -Path $runKey -Name 'RGBcontroller.Agent' -ErrorAction SilentlyContinue) {
+    Step 'Removing the Agent autostart (HKCU Run)'
+    Remove-ItemProperty -Path $runKey -Name 'RGBcontroller.Agent'
+}
 
 $service = Get-Service $serviceName -ErrorAction SilentlyContinue
 if ($service) {
