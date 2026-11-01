@@ -45,6 +45,13 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
         _loop.Wake();
     }
 
+    /// <summary>Session or display changed: logon/lock/active profile and the display-off turn-off sets.</summary>
+    public void SetSituation(LightingSituation situation)
+    {
+        _engine.SetSituation(situation);
+        _loop.Wake();
+    }
+
     /// <summary>Sends black to everything and waits (bounded) until the frame is out; the PC is about to sleep.</summary>
     public bool Suspend(TimeSpan timeout)
     {
