@@ -26,6 +26,7 @@ internal sealed class RgbControllerService : ServiceBase
         CanStop = true;
         CanShutdown = true;
         CanHandlePowerEvent = true;
+        CanHandleSessionChangeEvent = true;
         AutoLog = false;
     }
 
@@ -59,6 +60,9 @@ internal sealed class RgbControllerService : ServiceBase
 
         return true;
     }
+
+    protected override void OnSessionChange(SessionChangeDescription changeDescription) =>
+        _host?.OnSessionChange(changeDescription.Reason.ToString(), changeDescription.SessionId);
 
     private void StopHost(TimeSpan timeout)
     {
