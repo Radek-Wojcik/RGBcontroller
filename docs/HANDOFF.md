@@ -41,7 +41,7 @@ Repository: <https://github.com/Radek-Wojcik/RGBcontroller> (**private**, no LIC
 - `main` contains the merged `stage-1-service`, `stage-2-effects` and `stage-3-power` branches (`--no-ff`) and is
   pushed, with tag `v0.3.0-stage3`.
 - The stage branches are merged and can be deleted.
-- **The README was not refreshed for stage 2 or 3 yet**: it is the first task of the next session (section 7).
+- The README describes stages 1-3 (refreshed through PR #2).
 
 ---
 
@@ -361,10 +361,7 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
    problem after hibernation, read the log around `Suspending:` / `Resume (` first.
 2. **Stage 3 is closed:** version 0.3.0, merged into `main` (`--no-ff`), tag `v0.3.0-stage3`, pushed, installed.
    The branch `stage-3-power` can be deleted.
-3. **README refresh for stages 2 and 3** with the `anthropic-skills:publikowanie-projektow-github` skill:
-   effects and profiles, `--status` / `--profile` / `--group`, sleep/resume, lock and display behaviour and
-   `lighting.displayOff`, the CPU table. Show it, wait for "zatwierdzam", push `docs/readme-refresh`, open a PR
-   without Claude attribution, merge.
+3. **README refreshed for stages 2 and 3** (PR #2, merged 2026-11-01). Refresh it again after the stage 4 gate.
 4. **Ask the owner:** should the G502 mouse be off (O5)?
 5. **Stage 4** (Agent, tray, hotkeys, ambilight Screen mode, IPC frame pipe, spike R7) on `stage-4-agent`. The
    strip fallback while locked is already in place (the engine shows the fallback whenever there is no capture).
@@ -390,8 +387,7 @@ installed and running on this PC.
 
 First: run `.\build.ps1 -Test` (expect 165 green tests), check `git status` and that main equals origin/main, and
 run `& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines,
-ask the open question from HANDOFF.md section 7 (O5) and propose the README refresh for stages 2-3. Start stage 4
-only when the owner says so.
+ask the open question from HANDOFF.md section 7 (O5). Start stage 4 only when the owner says so.
 ```
 
 Useful commands:
