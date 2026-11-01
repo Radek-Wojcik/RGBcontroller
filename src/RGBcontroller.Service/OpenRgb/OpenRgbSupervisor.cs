@@ -17,6 +17,9 @@ public sealed record SupervisorTimings(TimeSpan HealthCheckInterval, TimeSpan St
     /// <summary>Longest wait for the first DEVICE_LIST_UPDATED after a rescan request (normally about 1 s).</summary>
     public TimeSpan RescanNoticeTimeout { get; init; } = TimeSpan.FromSeconds(15);
 
+    /// <summary>Longest wait after a resume rescan for all devices known before the sleep to come back.</summary>
+    public TimeSpan RescanCompleteTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
     /// <summary>Time since the system started (GetTickCount64).</summary>
     public Func<TimeSpan> Uptime { get; init; } = static () => TimeSpan.FromMilliseconds(Environment.TickCount64);
 
@@ -299,6 +302,7 @@ internal sealed class OpenRgbSupervisor
     private async Task RescanAfterResumeAsync(OpenRgbSdkClient client, DeviceLighting lighting, Task firstNotice, CancellationToken stopToken)
     {
         _sink.Detach();
+        var expected = lighting.Devices.Count;
         var settle = TimeSpan.FromMilliseconds(_config.ResumeRescanDelayMilliseconds);
         _log.Information("Resumed from sleep; rescanning devices in {Delay} ms", (long)settle.TotalMilliseconds);
         await Task.Delay(settle, stopToken).ConfigureAwait(false);
@@ -314,8 +318,38 @@ internal sealed class OpenRgbSupervisor
         }
 
         await WaitForQuietDeviceListAsync(stopToken).ConfigureAwait(false);
+        await WaitForExpectedDevicesAsync(client, expected, stopToken).ConfigureAwait(false);
         await lighting.ApplyAllAsync(stopToken).ConfigureAwait(false);
         DevicesApplied?.Invoke(lighting.Devices.Count);
+    }
+
+    /// <summary>
+    /// A rescan announces the devices in bursts with pauses longer than the settle period (seen: 0, then 2, then 5),
+    /// so after resume the devices from before the sleep are awaited, bounded by
+    /// <see cref="SupervisorTimings.RescanCompleteTimeout"/>, and everything is lit at once.
+    /// </summary>
+    private async Task WaitForExpectedDevicesAsync(OpenRgbSdkClient client, int expected, CancellationToken stopToken)
+    {
+        var deadline = _clock.Elapsed + _timings.RescanCompleteTimeout;
+        while (true)
+        {
+            var count = await client.GetControllerCountAsync(stopToken).ConfigureAwait(false);
+            var remaining = deadline - _clock.Elapsed;
+            if (count >= expected || remaining <= TimeSpan.Zero)
+            {
+                if (count < expected)
+                {
+                    _log.Warning("Only {Count} of {Expected} devices are back after the rescan; lighting those", count, expected);
+                }
+
+                return;
+            }
+
+            if (await _deviceListChanged.WaitAsync(remaining, stopToken).ConfigureAwait(false))
+            {
+                await WaitForQuietDeviceListAsync(stopToken).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>Debounce: wait until no DEVICE_LIST_UPDATED arrived for the settle period (a rescan sends several).</summary>
