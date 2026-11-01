@@ -200,6 +200,60 @@ public sealed class LightingEngineTests
     }
 
     [Fact]
+    public void Situation_SelectsTheLogonAndLockProfiles()
+    {
+        var config = Config(DefaultLighting.RainbowProfile) with { LogonProfile = "Solid White", LockProfile = "Night" };
+        var engine = Engine(config);
+        engine.SetDevices([Keyboard]);
+        var output = new RecordingOutput();
+
+        engine.SetSituation(new(SessionKind.LogonScreen, DisplayOn: true));
+        Assert.Null(engine.Render(TimeSpan.Zero, output));
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
+
+        engine.SetSituation(new(SessionKind.Unlocked, DisplayOn: true));
+        Assert.NotNull(engine.Render(TimeSpan.FromSeconds(1), output));
+    }
+
+    [Fact]
+    public void DisplayOffWhileLocked_TurnsOffTheSetAndKeepsTheRest()
+    {
+        var engine = Engine(Config("Solid White"), stripLeds: 113);
+        var gpu = Mouse with { Name = DefaultLighting.Gpu };
+        engine.SetDevices([Keyboard, gpu]);
+        var output = new RecordingOutput();
+        engine.Render(TimeSpan.Zero, output);
+        var modes = output.Modes.Count;
+
+        engine.SetSituation(new(SessionKind.Locked, DisplayOn: false));
+        engine.Render(TimeSpan.FromSeconds(1), output);
+
+        Assert.All(output.Leds[0], c => Assert.Equal(RgbColor.Black, c));
+        Assert.All(output.Strip, c => Assert.Equal(RgbColor.Black, c));
+        Assert.Contains(output.Leds[1], c => c != RgbColor.Black);
+        Assert.Equal(modes, output.Modes.Count); // still Direct, no mode change on the device
+
+        engine.SetSituation(new(SessionKind.Locked, DisplayOn: true));
+        engine.Render(TimeSpan.FromSeconds(2), output);
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
+        Assert.Contains(output.Strip, c => c != RgbColor.Black);
+    }
+
+    [Fact]
+    public void DisplayOffWhileUnlocked_TurnsOffOnlyTheStripByDefault()
+    {
+        var engine = Engine(Config("Solid White"), stripLeds: 113);
+        engine.SetDevices([Keyboard]);
+        var output = new RecordingOutput();
+
+        engine.SetSituation(new(SessionKind.Unlocked, DisplayOn: false));
+        engine.Render(TimeSpan.Zero, output);
+
+        Assert.All(output.Strip, c => Assert.Equal(RgbColor.Black, c));
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
+    }
+
+    [Fact]
     public void Render_DoesNotAllocate()
     {
         var engine = Engine(Config(DefaultLighting.RainbowProfile), stripLeds: 113);
