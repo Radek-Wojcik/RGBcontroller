@@ -190,7 +190,8 @@ internal sealed class AgentApplication : ApplicationContext
     private void Populate(ContextMenuStrip menu)
     {
         menu.SuspendLayout();
-        foreach (ToolStripItem item in menu.Items)
+        // Disposing an item removes it from the collection, so iterate over a copy.
+        foreach (var item in menu.Items.Cast<ToolStripItem>().ToArray())
         {
             if (item != _sliderHost)
             {
