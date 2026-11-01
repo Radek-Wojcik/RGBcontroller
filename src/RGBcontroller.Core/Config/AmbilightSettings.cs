@@ -4,7 +4,8 @@ namespace RGBcontroller.Core.Config;
 /// Where the strip LEDs sit around the monitor (SPEC 6.3), viewed from the front. LEDs are numbered from the data
 /// input. The path starts at <see cref="StartCorner"/> and runs <see cref="Clockwise"/> over the four edges, each
 /// edge's LEDs spread evenly along it. LEDs listed in <see cref="Gaps"/> stay dark and take no place on the path;
-/// LEDs beyond the edge total stay dark too, and edge positions beyond the strip's LED count stay unused. The layout wizard (stage 5) writes the same structure.
+/// LEDs beyond the edge total continue around the loop (a strip whose end overlaps its start shows the same colors
+/// there), and edge positions beyond the strip's LED count stay unused. The layout wizard (stage 5) writes the same structure.
 /// </summary>
 public sealed record StripLayoutConfig
 {
@@ -21,7 +22,10 @@ public sealed record StripLayoutConfig
 
     public int Left { get; set; } = 21;
 
-    /// <summary>Path positions the first LED is shifted along the direction (e.g. a strip that starts at the middle of the bottom edge).</summary>
+    /// <summary>
+    /// Path positions the first LED is shifted along the direction, e.g. 9 for a strip that starts 9 LEDs up the left
+    /// edge when the path starts at the bottom-left corner.
+    /// </summary>
     public int Offset { get; set; }
 
     /// <summary>LED indices (0-based, data order) that stay dark, e.g. LEDs hidden behind the monitor stand.</summary>
