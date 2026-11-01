@@ -69,6 +69,9 @@ public static partial class ConfigValidator
         }
 
         ValidateLighting(errors, config.Lighting);
+        ValidateLayout(errors, strip);
+        ValidateCapture(errors, config.Capture);
+        ValidateHotkeys(errors, config.Hotkeys, config.Lighting);
 
         if (!Enum.IsDefined(config.Logging.MinimumLevel))
         {
