@@ -101,7 +101,7 @@ public sealed class OpenRgbSupervisorTests
         var applied = 0;
         supervisor.DevicesApplied += _ => Interlocked.Increment(ref applied);
         await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await Task.Delay(800, TestContext.Current.CancellationToken); // static frame plus its two repeats
         var appliedBefore = Volatile.Read(ref applied);
         var updatesBefore = server.LedUpdates.Count;
 
@@ -112,9 +112,9 @@ public sealed class OpenRgbSupervisorTests
         await server.NotifyDeviceListUpdatedAsync();
 
         await WaitUntilAsync(() => server.LastColors.ContainsKey(1));
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+        await Task.Delay(800, TestContext.Current.CancellationToken);
         Assert.Equal(appliedBefore + 1, Volatile.Read(ref applied));
-        Assert.Equal(updatesBefore + 2, server.LedUpdates.Count);
+        Assert.Equal(updatesBefore + 2 * 3, server.LedUpdates.Count);
     }
 
     [Fact]
@@ -137,6 +137,32 @@ public sealed class OpenRgbSupervisorTests
         Assert.Equal(1, launcher.Starts);
         await Task.Delay(300, TestContext.Current.CancellationToken);
         Assert.Equal(appliedBefore + 1, Volatile.Read(ref applied));
+    }
+
+    [Fact]
+    public async Task Resume_WaitsForAllDevicesBeforeLighting()
+    {
+        // O4: a real rescan reports devices in bursts (0, then 2, then 5); lighting must start once, with all of them.
+        var keyboard = ControllerDataWriter.Keyboard();
+        var mouse = ControllerDataWriter.Mouse();
+        await using var server = new FakeOpenRgbServer(5, keyboard, mouse);
+        await using var run = Start(server, out var supervisor, out _);
+        var applied = new System.Collections.Concurrent.ConcurrentQueue<int>();
+        await WaitUntilAsync(() => server.UpdateModeRequests.Count == 2);
+        supervisor.DevicesApplied += applied.Enqueue;
+
+        server.Controllers = [keyboard];
+        supervisor.NotifyResumed();
+        await WaitUntilAsync(() => Volatile.Read(ref server.RescanRequests) == 1);
+        await Task.Delay(400, TestContext.Current.CancellationToken);
+        Assert.Empty(applied);
+
+        server.Controllers = [keyboard, mouse];
+        await server.NotifyDeviceListUpdatedAsync();
+
+        await WaitUntilAsync(() => !applied.IsEmpty);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.Equal([2], applied);
     }
 
     [Fact]

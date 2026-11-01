@@ -10,11 +10,14 @@ public sealed record LightingConfig
 {
     public string ActiveProfile { get; set; } = DefaultLighting.RainbowProfile;
 
-    /// <summary>Profile shown on the logon screen (used from stage 3).</summary>
+    /// <summary>Profile shown on the logon screen (no user in the console session).</summary>
     public string LogonProfile { get; set; } = DefaultLighting.LogonProfileName;
 
-    /// <summary>Profile while locked with the display on (used from stage 3); null means the active profile.</summary>
+    /// <summary>Profile while the console session is locked; null means the active profile.</summary>
     public string? LockProfile { get; set; }
+
+    /// <summary>What turns off while the display is off (SPEC 4).</summary>
+    public DisplayOffConfig DisplayOff { get; set; } = new();
 
     /// <summary>Group that lights zones no group claims; null means unclaimed zones stay off.</summary>
     public string? DefaultGroup { get; set; }
@@ -35,6 +38,7 @@ public sealed record LightingConfig
         && ActiveProfile == other.ActiveProfile
         && LogonProfile == other.LogonProfile
         && LockProfile == other.LockProfile
+        && DisplayOff == other.DisplayOff
         && DefaultGroup == other.DefaultGroup
         && ListEquality.Equal(Layouts, other.Layouts)
         && ListEquality.Equal(Groups, other.Groups)
@@ -42,6 +46,34 @@ public sealed record LightingConfig
         && ListEquality.Equal(Profiles, other.Profiles);
 
     public override int GetHashCode() => HashCode.Combine(ActiveProfile, Groups.Count, Profiles.Count);
+}
+
+/// <summary>
+/// The two per-device turn-off sets of SPEC 4. Everything not in the set keeps its profile while the display is off.
+/// </summary>
+public sealed record DisplayOffConfig
+{
+    /// <summary>Display off by the idle timeout while a user is logged in and the session is unlocked.</summary>
+    public TurnOffSet Unlocked { get; set; } = new() { Strip = true };
+
+    /// <summary>Display off while the session is locked or the logon screen is shown.</summary>
+    public TurnOffSet Locked { get; set; } = new() { Strip = true, Devices = [DefaultLighting.Keyboard, DefaultLighting.Mouse] };
+}
+
+/// <summary>Outputs forced to black in one situation.</summary>
+public sealed record TurnOffSet
+{
+    public bool Strip { get; set; }
+
+    /// <summary>OpenRGB device names, exactly as <c>--probe</c> reports them.</summary>
+    public IReadOnlyList<string> Devices { get; set; } = [];
+
+    public bool Contains(string device) => Devices.Contains(device, StringComparer.OrdinalIgnoreCase);
+
+    public bool Equals(TurnOffSet? other) =>
+        other is not null && Strip == other.Strip && ListEquality.Equal(Devices, other.Devices);
+
+    public override int GetHashCode() => HashCode.Combine(Strip, Devices.Count);
 }
 
 /// <summary>
