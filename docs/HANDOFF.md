@@ -1,7 +1,8 @@
 # RGBcontroller: project state and handoff
 
-Last updated: 2026-11-01, after the stage 2 gate. **Read this file right after `SPEC.md` and `CLAUDE.md` when you
-start a new session.** It records everything that was built, decided and learned in stages 0-2, the exact state of
+Last updated: 2026-11-01 evening, stage 3 built and installed, gate almost complete. **Read this file right after
+`SPEC.md` and `CLAUDE.md` when you start a new session.** It records everything that was built, decided and learned
+in stages 0-3, the exact state of
 the owner's PC, and what to do next. `SPEC.md` stays the source of truth for requirements. This file is the source
 of truth for **what exists now**.
 
@@ -14,14 +15,17 @@ of truth for **what exists now**.
 | 0. Foundation | **Passed** (2026-10-30) | `v0.0.1-stage0` | `docs/spikes/R2-R3-openrgb-sdk.md` |
 | 1. Service + OpenRGB supervisor + Adalight | **Passed** (2026-10-31) | `v0.1.0-stage1` | `docs/spikes/R1-R5-R6-stage1.md` |
 | 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
-| 3. Power, session, display | **Next.** Suspend/resume is already done; lock, display, logon/Lock profiles remain | | |
+| 3. Power, session, display | **Built, installed, owner says "everything works".** Gate counts incomplete: 3 of 10 sleeps, 0 of 3 hibernates in the logs. Not merged, not tagged. | (`v0.3.0-stage3` after the gate) | `docs/spikes/stage3-power.md` |
 | 4-6 | Not started | | |
 
 What works today on the owner's PC:
-- The installed build is commit `7aa4471` (stage 2 code). The tag only adds docs and the version bump to 0.2.0,
-  so `--status` still reports 0.0.1 until the next `install-dev.ps1`.
+- The installed build is commit `b6a1d4f` on branch `stage-3-power` (version 0.2.0 in `--status`; bump to 0.3.0
+  when the stage is tagged).
 - The Windows Service `RGBcontroller` (LocalSystem, automatic start) lights the strip and all 5 OpenRGB devices
   before the logon screen.
+- Session and display policy (SPEC 4): Logon profile on the logon screen, active profile when unlocked, Lock
+  profile (null = active) when locked. Display off while unlocked turns the strip off; display off while locked or
+  on the logon screen turns the strip, keyboard and mouse off. Everything returns when the display turns on.
 - Effects run from profiles. The active profile is **Rainbow**: radial pump/fans, keyboard wave right to left,
   mouse/GPU/board color cycle, RAM mirror, strip radial rainbow.
 - CPU (whole processor):
@@ -30,7 +34,7 @@ What works today on the owner's PC:
   - about 1.7% with the owner's RAM tuning (10 FPS);
   - the old setup used 2.58%.
 - Sleep: black before suspend; after resume a rescan in the single OpenRGB brings everything back within about
-  7 s.
+  7 s, all 5 devices in one apply (O4 fixed).
 - `RGBcontroller.Service.exe --status | --profile <name> | --group <name> ...` control the running Service over
   the named pipe, without elevation.
 
@@ -38,13 +42,14 @@ Repository: <https://github.com/Radek-Wojcik/RGBcontroller> (**private**, no LIC
 - `main` contains the merged `stage-1-service` and `stage-2-effects` branches (`--no-ff`) and is pushed, with tag
   `v0.2.0-stage2`.
 - The branches `stage-1-service` and `stage-2-effects` are merged and can be deleted.
-- **The README was not refreshed for stage 2 yet**: it is the first task of the next session (section 7).
+- `stage-3-power` (8 commits on top of `main`) is **local only, not pushed**.
+- **The README was not refreshed for stage 2 or 3 yet**: do both together when stage 3 is closed (section 7).
 
 ---
 
 ## 2. Owner preferences and working rules (binding)
 
-These come from the owner during stages 0-2 and add to `CLAUDE.md`:
+These come from the owner during stages 0-3 and add to `CLAUDE.md`:
 
 - **Talk to the owner in Polish.** Code, comments, commits and docs are in English.
 - **Commit author is the owner only.** Use `Radek Wójcik <124835720+Radek-Wojcik@users.noreply.github.com>`; it is already set as the repo-local git identity.
@@ -226,7 +231,32 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 - `RgbControllerService` handles power events: Suspend leads to `LightingHost.OnSuspend`, and the Resume* events
   to `OnResume` (debounced).
 
-### `tests/RGBcontroller.Tests` (xUnit v3, 154 tests, all green)
+### Stage 3 additions (branch `stage-3-power`)
+- `Core/Config/LightingConfig.cs`: `lighting.displayOff` with `unlocked` (default: strip) and `locked` (default:
+  strip, keyboard, mouse) `TurnOffSet`s (`strip` flag plus OpenRGB device names). New keys with defaults only, so
+  the schema stays 2; the owner's `config.json` does not contain them yet and runs on the defaults.
+- `Core/Lighting/SessionPolicy.cs`: `SessionKind` (Unlocked, Locked, LogonScreen), `LightingSituation`
+  (session + display on), `ProfileFor` and `TurnedOff` (the logon screen uses the locked set).
+- `LightingEngine`:
+  - `SetSituation` selects the profile and forces the turn-off set to black (devices keep their per-LED mode);
+    the log line `Rendering profile X (Locked, display off)` shows the situation.
+  - Static device frames are sent 3 times (0 / 250 / 500 ms): the Razer keyboard is written in several USB
+    packets and one got lost.
+  - `ResendAll` re-sends modes and frames; `LightingController` calls it 5 s and 30 s after every attach
+    (a lost SMBus mode write left one RAM stick dark after a cold boot).
+- `Service/Power/`:
+  - `ConsoleSession`: WTS query of the console session (user name, lock flag).
+  - `DisplayStateMonitor`: `PowerSettingRegisterNotification(GUID_CONSOLE_DISPLAY_STATE)` with an
+    `UnmanagedCallersOnly` callback (ServiceBase drops the power setting payload).
+  - `SituationTracker`: logs every raw event, re-reads WTS on each trigger and 2 s later, calls the engine under
+    its lock so changes arrive in order.
+- `RgbControllerService`: `CanHandleSessionChangeEvent`, `OnSessionChange` to `LightingHost.OnSessionChange`.
+  `LightingHost` reads the session before the first frame and refreshes it on resume.
+- `OpenRgbSupervisor`: after a resume rescan it waits up to `RescanCompleteTimeout` (10 s) for the device count from
+  before the sleep (O4).
+- `StripWriter`: open failures now name the port (was `port null`).
+
+### `tests/RGBcontroller.Tests` (xUnit v3, 165 tests, all green)
 - `FakeOpenRgbServer` is a loopback TCP stand-in for OpenRGB 1.0rc2:
   - It enforces the size checks for UPDATELEDS and UPDATEMODE, records LED colors, mode and resize requests, and pushes DEVICE_LIST_UPDATED.
   - It has switches for an unresponsive server and for dropping clients.
@@ -289,6 +319,18 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
     rainbow), so after resume the modes must be pushed again. A rescan in the same OpenRGB plus re-apply does
     this; no restart is needed.
 13. **Logon:** Windows authenticates the user about 11 s after boot, and profile load ends at +24-28 s on every boot (the same before and after the install).
+14. **Spike R4 (stage 3):** session events via `ServiceBase` work in Session 0; display state via
+    `PowerSettingRegisterNotification` with `DEVICE_NOTIFY_CALLBACK` works in Session 0 and console mode. Do not
+    try the service status handle route: `ServiceBase` drops the `POWERBROADCAST_SETTING` payload. Session events
+    arrive on thread-pool threads, so always re-read the state from WTS instead of trusting event order.
+15. **Windows lock screen turns the display off after about 60-80 s.** After every logon Windows reports a
+    `SessionLock` 0.3 s later and an unlock 13-28 s later (cause not investigated; harmless while the Lock profile
+    equals the active one).
+16. **Never send a static frame or a mode only once.** USB (Razer, row by row) and SMBus (HyperX RAM) writes can
+    be lost without any error reaching the SDK client. Static frames are repeated twice, and modes plus frames are
+    re-sent 5 s and 30 s after every attach.
+17. **AmbiBox grabs COM3 if someone starts it** (`Access to the path 'COM3' is denied` in the log). The Service
+    keeps retrying and takes the port back when AmbiBox lets go; close AmbiBox.
 
 ---
 
@@ -298,58 +340,42 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 |---|---|---|
 | O1 | OpenRGB writes no log file despite the seeded `"LogManager": {"log_file": true}`; logs would help diagnostics. Check the exact setting name or the `--loglevel` / `-v` flags. | Stage 3 or 6 diagnostics |
 | O2 | Control pipe exists (profiles, tuning, status). Missing: the frame pipe (strip colors from the Agent, preview to the UI), config edits beyond tuning, and Hello enforcement. | Stages 4-5 |
-| O3 | Suspend/resume is done (stage 2). Lock, display on/off, session logon/logoff and the Logon/Lock profiles are not handled yet. | Stage 3 (spike R4) |
-| O4 | Device-list debounce applies 0, then 2, then 5 devices during a rescan (seen after resume). A better settle (expected device set plus a longer quiet period) would light everything at once. | Stage 3 |
+| O3 | **Done in stage 3** (lock, display, logon/logoff, Logon/Lock profiles). Remaining gate evidence: 7 more sleep cycles and 3 hibernate cycles. | Stage 3 gate |
+| O4 | **Done in stage 3** (wait for the expected device count after a resume rescan). The hot-plug path (DEVICE_LIST_UPDATED without resume) still applies after the quiet period only. | Done |
 | O5 | The G502 can be set to `Off` per profile (effect Off); it is still lit in Rainbow. Ask the owner whether the mouse should be off. | Stage 2 gate / 5 |
-| O10 | The Adalight CH340 drops off USB intermittently (hardware or cable). Re-check after the owner changes the port. | Owner |
+| O10 | The Adalight CH340 drops off USB intermittently. 2026-11-01: gone 15:33-16:52, several dropouts around unplugging the LED BOX, none in a 10-minute watch without touching it. Once the port accepted writes but the strip stayed dark until the LED BOX was power-cycled (Arduino stuck). Suspect power/ground of the LED BOX or the USB cable/port. The Service always reconnected by itself. | Owner (hardware) |
+| O12 | The turn-off sets and the Lock profile are only editable in `config.json`; the UI (stage 5) needs the two checkbox lists from SPEC 4 and a Lock profile picker. | Stage 5 |
+| O13 | USB selective suspend is on in the power plan and the root hub of the CH340 may be powered down by Windows; not proven to matter. Owner's choice to change (system setting). | Owner |
 | O11 | RAM smoothness versus CPU: owner tuning 10 FPS (about 1.7% total). A smoother RAM would need about 20 FPS (about 3.3%). | Owner decision |
 | O6 | Owner's remarks, still open: fans "spin up hard / go dark" at power-on (not clarified whether RPM or LEDs); the logon-screen shutdown button needed 3 clicks once (not reproduced, nothing in the logs). | Ask if they come up again |
 | O7 | `third_party/openrgb` needs `tools/Get-PinnedOpenRgb.ps1` on a fresh checkout; a release build should not depend on `C:\Program Files\OpenRGB`. | Stage 6 installer |
 | O8 | The ProgramData `config.json` was written before some keys existed (`minimumUptimeSeconds`); missing keys take the code defaults. Note this when keys are renamed (migration). | Ongoing |
-| O9 | Logon and Lock profile switching, ambilight Screen mode, Agent, UI and the installer: everything from SPEC stages 3-6. | Stages 3-6 |
+| O9 | Ambilight Screen mode, Agent, UI and the installer: everything from SPEC stages 4-6. | Stages 4-6 |
 
 ---
 
 ## 7. Next steps
 
-1. **README refresh for stage 2** (the gate is passed; user-visible behaviour changed):
-   - Use the `anthropic-skills:publikowanie-projektow-github` skill.
-   - Content: effects and profiles, the `--status` / `--profile` / `--group` commands, sleep/resume, the CPU table.
-   - Show the README to the owner and wait for "zatwierdzam".
-   - Then push a `docs/readme-refresh` branch, open a PR without Claude attribution, and merge it.
-2. **Ask the owner** (left open at the stage 2 gate):
-   - Should the G502 mouse be off (O5)? If yes, set the `Mouse` group's effect to `Off` in the profiles via a config
-     edit (no IPC for effect kinds yet).
-   - Is the Adalight USB problem (O10) fixed after changing the port or cable?
-3. **Stage 3** (SPEC 4, spike R4) on a new branch `stage-3-power`. Suspend/resume is already done.
-   - **Spike R4:** `RegisterServiceCtrlHandlerEx` / `ServiceBase` session change events, plus
-     `RegisterPowerSettingNotification(GUID_CONSOLE_DISPLAY_STATE, DEVICE_NOTIFY_SERVICE_HANDLE)` for display
-     on/off. Log every event to the service log over 10 cycles, including on the logon screen.
-     - `ServiceBase` needs `CanHandleSessionChangeEvent = true`.
-     - Display state is not surfaced by `ServiceBase`: register the power setting notification with the service
-       status handle and handle `SERVICE_CONTROL_POWEREVENT` with `PBT_POWERSETTINGCHANGE`. That likely means
-       overriding the control handler (custom `RegisterServiceCtrlHandlerEx`); check what .NET's `ServiceBase` lets
-       you hook.
-   - **Behaviour (SPEC 4 table):**
-     - logon screen: Logon profile (`lighting.logonProfile`, shipped "Logon");
-     - user logged in: active profile;
-     - locked with the display on: Lock profile (`lighting.lockProfile`; null means active), strip in fallback mode;
-     - locked with the display off: strip, keyboard and mouse off;
-     - display off while unlocked: strip off, other devices per device setting;
-     - restore when the display turns on.
-   - **Config needed:** per-device turn-off sets (two lists: display off while unlocked, display off while
-     locked) with the SPEC defaults. Add them to `lighting` (schema stays 2 if only new keys with defaults are
-     added).
-   - **Engine:** a per-target forced "off" overlay (like `SetBlackout`, but per device or group); profile selection
-     by session state in `LightingHost`.
-   - **O4:** after a rescan, wait for the expected device set (or a longer quiet period) before applying, so all 5
-     devices return together.
-   - **Also check:** hibernate (3 cycles), shutdown black (already done in `OnShutdown`), Fast Startup is off on this
-     PC.
-   - **Gate:** 10 sleep/resume, 10 display-off/on, 3 hibernate, lock/unlock and shutdown. No blinking, no second
-     OpenRGB, everything back within a few seconds. Read the logs yourself; the owner only looks at the hardware.
-4. After stage 3: stage 4 (Agent, tray, hotkeys, ambilight Screen mode, IPC frame pipe), then stage 5 (UI, which
-   must expose speed, scale and FPS per group via `TuneGroupAsync`), then stage 6 (installer).
+1. **Finish the stage 3 gate** (owner said "everything works"; the logs do not yet cover the full SPEC counts):
+   - 7 more sleep/resume cycles (Start, Sleep, wait about 10 s, wake) and 3 hibernate cycles (`shutdown /h`, then
+     the power button). Read the logs yourself: count `Suspending:` / `Resume (` lines, check that every resume
+     ends with `Handed 5 OpenRGB devices` and that `Only N of M`, `Restarting OpenRGB` and stray kills never appear.
+   - Hibernate is available on this PC (`powercfg /a`); Hybrid Sleep is also listed.
+   - Already confirmed on the hardware and in the logs: lock, locked with the display off (strip, keyboard and mouse
+     fully dark after the repeat fix), display off while unlocked (strip only), logoff to the logon screen (Logon
+     profile), restart and cold boot (all devices including all 4 RAM sticks after the re-send fix), 3 sleeps.
+2. **Close stage 3** after the owner's explicit OK: bump `Version` in `Directory.Build.props` to 0.3.0, commit,
+   merge `stage-3-power` into `main` with `--no-ff`, tag `v0.3.0-stage3` (annotated), push `main` and the tag,
+   re-run `install-dev.ps1` so `--status` reports 0.3.0.
+3. **README refresh for stages 2 and 3** with the `anthropic-skills:publikowanie-projektow-github` skill:
+   effects and profiles, `--status` / `--profile` / `--group`, sleep/resume, lock and display behaviour and
+   `lighting.displayOff`, the CPU table. Show it, wait for "zatwierdzam", push `docs/readme-refresh`, open a PR
+   without Claude attribution, merge.
+4. **Ask the owner:** should the G502 mouse be off (O5)?
+5. **Stage 4** (Agent, tray, hotkeys, ambilight Screen mode, IPC frame pipe, spike R7) on `stage-4-agent`. The
+   strip fallback while locked is already in place (the engine shows the fallback whenever there is no capture).
+   Then stage 5 (UI: speed/scale/FPS per group via `TuneGroupAsync`, the turn-off checkboxes and the Lock profile,
+   O12) and stage 6 (installer).
 
 ---
 
@@ -365,12 +391,12 @@ Polish; code, comments, commits and docs are in English.
 Read, in this order: SPEC.md, CLAUDE.md, docs/HANDOFF.md, then docs/spikes/*.md. HANDOFF.md describes exactly what
 exists, the owner's PC state, binding preferences (commits authored only by the owner with the noreply address, no
 Co-Authored-By/Claude attribution anywhere), decisions and open items. Stages 0-2 have passed (tags v0.0.1-stage0,
-v0.1.0-stage1, v0.2.0-stage2); the Service with the effect engine is installed and running on this PC.
+v0.1.0-stage1, v0.2.0-stage2). Stage 3 (power, session, display) is built on the local branch stage-3-power and
+installed on this PC; its gate still needs 7 sleep and 3 hibernate cycles.
 
-First: run `.\build.ps1 -Test` (expect 154 green tests), check `git status` and that main equals origin/main, and
-run `& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines,
-ask the two open questions from HANDOFF.md section 7, and propose the README refresh. Start stage 3 only when the
-owner says so.
+First: switch to stage-3-power, run `.\build.ps1 -Test` (expect 165 green tests), check `git status`, and run
+`& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines and
+give the owner the remaining stage 3 gate steps from HANDOFF.md section 7. Close stage 3 only after the owner's OK.
 ```
 
 Useful commands:
