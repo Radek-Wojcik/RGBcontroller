@@ -1,6 +1,6 @@
 # RGBcontroller: project state and handoff
 
-Last updated: 2026-10-31, after the stage 1 gate. **Read this file right after `SPEC.md` and `CLAUDE.md` when you
+Last updated: 2026-11-01, during the stage 2 gate. **Read this file right after `SPEC.md` and `CLAUDE.md` when you
 start a new session.** It records everything that was built, decided and learned in stages 0-1, the exact state of
 the owner's PC, and what to do next. `SPEC.md` stays the source of truth for requirements. This file is the source
 of truth for **what exists now**.
@@ -13,13 +13,23 @@ of truth for **what exists now**.
 |---|---|---|---|
 | 0. Foundation | **Passed** (2026-10-30) | `v0.0.1-stage0` | `docs/spikes/R2-R3-openrgb-sdk.md` |
 | 1. Service + OpenRGB supervisor + Adalight | **Passed** (2026-10-31) | `v0.1.0-stage1` | `docs/spikes/R1-R5-R6-stage1.md` |
-| 2. Effect engine | **Not started.** The owner said explicitly: do not start until told. | | |
+| 2. Effect engine (+ sleep/resume pulled forward) | **Gate in progress**: CPU measured, resume confirmed by the owner, waiting for the final OK | | `docs/spikes/stage2-effects.md` |
 | 3-6 | Not started | | |
 
-What works today on the owner's PC:
-- The Windows Service `RGBcontroller` (LocalSystem, automatic start) lights the Adalight strip 13.2 s after boot.
-- It lights all 5 OpenRGB devices 17.2 s after boot, before the logon screen, with one static color (`#00E5FF`).
-- There is exactly one OpenRGB instance, and CPU use is 0.000%.
+What works today on the owner's PC (branch `stage-2-effects` installed, not merged yet):
+- The Windows Service `RGBcontroller` (LocalSystem, automatic start) lights the strip and all 5 OpenRGB devices
+  before the logon screen.
+- Effects run from profiles. The active profile is **Rainbow**: radial pump/fans, keyboard wave right to left,
+  mouse/GPU/board color cycle, RAM mirror, strip radial rainbow.
+- CPU (whole processor):
+  - static profile 0.012%;
+  - Rainbow 0.97% with RAM at 5 FPS;
+  - about 1.7% with the owner's RAM tuning (10 FPS);
+  - the old setup used 2.58%.
+- Sleep: black before suspend; after resume a rescan in the single OpenRGB brings everything back within about
+  7 s.
+- `RGBcontroller.Service.exe --status | --profile <name> | --group <name> ...` control the running Service over
+  the named pipe, without elevation.
 
 Repository: <https://github.com/Radek-Wojcik/RGBcontroller> (**private**, no LICENSE file: "All rights reserved").
 - `main` is up to date and contains the merged `stage-1-service` branch and PR #1 (the README refresh).
@@ -46,6 +56,12 @@ These come from the owner during stages 0-1 and add to `CLAUDE.md`:
   - Each passed gate gets an annotated tag (`v0.N.0-stageN`), and the result is pushed.
   - Refresh the README through the `anthropic-skills:publikowanie-projektow-github` skill: show the README, wait for "zatwierdzam", then push a `docs/readme-refresh` branch, open a PR and merge it.
 - **Do not add features that are not in `SPEC.md` without asking.**
+- **Owner's stage 2 wishes:**
+  - RAM must run the mirror effect, not hardware mode, with a tunable FPS.
+  - The UI (stage 5) must expose speed, wave length (scale) and FPS per group. SPEC 7.3 covers this; the backend is
+    `TuneGroupAsync`.
+  - Sleep/resume bugs are the owner's top priority.
+- **In PowerShell, decimal numbers need a dot** (`--speed 0.08`); `0,08` becomes an array.
 - **Never touch fan or pump control.**
   - The owner mentioned fans "spinning up hard then going quiet/dark" at power-on.
   - It is still open whether they meant RPM (BIOS behaviour before FanControl starts) or the LEDs (ASUS power-on effect before the Service lights them). Either way it is not caused by the app, which never controls fans.
@@ -67,6 +83,8 @@ These come from the owner during stages 0-1 and add to `CLAUDE.md`:
 | Node.js | **Not installed** (needed in stage 5 for the React front end). | n/a |
 | Fast Startup | Off (`HiberbootEnabled = 0`), so "Shut down" is a cold boot. | n/a |
 | PawnIO driver | Present (`PawnIO`, manual start, running). | n/a |
+| `config.json` | Schema 2 (migrated; `config.v1.bak.json` next to it). Active profile Rainbow; the RAM group is tuned to 10 FPS, and Rainbow's RAM effect to speed 0.08, scale 0.3. | Edit it, or use `--group` / `--profile` |
+| Adalight CH340 | **Drops off USB intermittently** (no VID_1A86 device in Windows at all); the owner was asked to check the cable and port. | n/a |
 
 Hardware facts confirmed live (in addition to SPEC section 2):
 - The keyboard has **132 LEDs in a 6x22 matrix**, not the 104-key 6x21 layout that SPEC assumed.
@@ -162,7 +180,42 @@ Contracts only; no server exists yet:
 ### `src/RGBcontroller.Agent`, `src/RGBcontroller.UI`
 Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They are built in stages 4 and 5.
 
-### `tests/RGBcontroller.Tests` (xUnit v3, 95 tests, all green)
+### Stage 2 additions
+- `Core/Config/LightingConfig.cs` and `DefaultLighting.cs` (schema 2):
+  - `lighting` holds layouts (zone shapes and segments), groups (zone sets with `maxFps`), palettes and profiles
+    (effect per group plus ambilight plus master brightness).
+  - Defaults are pre-mapped to the owner's device names.
+  - `LightingV2Migration` drops the stage 1 section.
+  - `ConfigValidator.Lighting.cs` checks the references.
+  - `LightingEdits` applies `GroupTuning`.
+- `Core/Effects`:
+  - `Palette`: cyclic, 1024-entry lookup table.
+  - `LedPoint`: x, y, angle and radius.
+  - `Effect` subclasses: Off, Static, Breathing, Wave, Radial, Mirror, ColorCycle, Aurora.
+- `Core/Lighting`:
+  - `LedLayoutBuilder`: matrix, line, ring, point.
+  - `DeviceModes`: Direct and hardware mode selection.
+  - `LightingEngine`:
+    - per-target FPS, change-only writes, brightness group x master;
+    - hardware mode for whole devices, strip fallback (Screen shows Radial until stage 4);
+    - `SetBlackout` for suspend;
+    - `Render` does not allocate (tested).
+- `Service/Lighting`:
+  - `RenderLoop`: dedicated thread with a `HighResolutionTimer`, sleeps when nothing is animated; `RenderNow`
+    for suspend.
+  - `LightingController` is the `IDeviceLightingSink` the supervisor attaches devices to.
+- `OpenRgbSupervisor`:
+  - It detaches the engine on DEVICE_LIST_UPDATED, on session end and before blackout.
+  - `NotifyResumed` triggers delay, rescan and re-apply.
+- `Service/Ipc`:
+  - `ControlServer`: pipe ACL with SYSTEM/Admins full, INTERACTIVE read/write, and the creating account.
+  - `ServiceControlEndpoint` validates input.
+  - `ControlClient` is the CLI.
+  - IPC protocol 1.2 adds GetProfiles, SetActiveProfile and TuneGroup.
+- `RgbControllerService` handles power events: Suspend leads to `LightingHost.OnSuspend`, and the Resume* events
+  to `OnResume` (debounced).
+
+### `tests/RGBcontroller.Tests` (xUnit v3, 154 tests, all green)
 - `FakeOpenRgbServer` is a loopback TCP stand-in for OpenRGB 1.0rc2:
   - It enforces the size checks for UPDATELEDS and UPDATEMODE, records LED colors, mode and resize requests, and pushes DEVICE_LIST_UPDATED.
   - It has switches for an unresponsive server and for dropping clients.
@@ -218,7 +271,13 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
     - Windows PowerShell 5.1: `ConvertFrom-Json` fails on the owner's `OpenRGB.json` (duplicate keys); UTF-8 logs need a BOM; `typeperf` does not work (Polish locale).
     - The tool shell is not elevated. OpenRGB runs as SYSTEM, so killing it needs admin.
     - `C:\ProgramData\RGBcontroller` must never be created from a user prompt; `--probe` is read-only on purpose.
-11. **Logon:** Windows authenticates the user about 11 s after boot, and profile load ends at +24-28 s on every boot (the same before and after the install).
+11. **Stage 2 CPU:** the RAM is the whole budget (about 0.16% total CPU per RAM FPS, kernel time in OpenRGB's
+    SMBus writes). Everything else costs about 0.13%; our Service costs about 0.02%. Details are in
+    `docs/spikes/stage2-effects.md`.
+12. **Resume:** devices come back in their power-on state (RAM rainbow, GPU dark, board and mouse factory
+    rainbow), so after resume the modes must be pushed again. A rescan in the same OpenRGB plus re-apply does
+    this; no restart is needed.
+13. **Logon:** Windows authenticates the user about 11 s after boot, and profile load ends at +24-28 s on every boot (the same before and after the install).
 
 ---
 
@@ -227,45 +286,45 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 | # | Item | Where it belongs |
 |---|---|---|
 | O1 | OpenRGB writes no log file despite the seeded `"LogManager": {"log_file": true}`; logs would help diagnostics. Check the exact setting name or the `--loglevel` / `-v` flags. | Stage 3 or 6 diagnostics |
-| O2 | No IPC server yet; the contracts are tested in-memory only. A named-pipe server with the ACL from SPEC section 3 is needed. | Stage 4 (Agent), possibly stage 2 for the profile switch |
-| O3 | Power, session and display events (suspend, resume, lock, display off) are not handled; only stop and shutdown send black. | Stage 3 (spike R4) |
-| O4 | Device-list debounce may apply to 0 devices mid-rescan; a better settle (expected device set plus quiet period) would help. | Stage 3 |
-| O5 | The G502 is lit, but the owner had kept it off. Per-device on/off and effects are needed. | Stage 2 |
+| O2 | Control pipe exists (profiles, tuning, status). Missing: the frame pipe (strip colors from the Agent, preview to the UI), config edits beyond tuning, and Hello enforcement. | Stages 4-5 |
+| O3 | Suspend/resume is done (stage 2). Lock, display on/off, session logon/logoff and the Logon/Lock profiles are not handled yet. | Stage 3 (spike R4) |
+| O4 | Device-list debounce applies 0, then 2, then 5 devices during a rescan (seen after resume). A better settle (expected device set plus a longer quiet period) would light everything at once. | Stage 3 |
+| O5 | The G502 can be set to `Off` per profile (effect Off); it is still lit in Rainbow. Ask the owner whether the mouse should be off. | Stage 2 gate / 5 |
+| O10 | The Adalight CH340 drops off USB intermittently (hardware or cable). Re-check after the owner changes the port. | Owner |
+| O11 | RAM smoothness versus CPU: owner tuning 10 FPS (about 1.7% total). A smoother RAM would need about 20 FPS (about 3.3%). | Owner decision |
 | O6 | Owner's remarks, still open: fans "spin up hard / go dark" at power-on (not clarified whether RPM or LEDs); the logon-screen shutdown button needed 3 clicks once (not reproduced, nothing in the logs). | Ask if they come up again |
 | O7 | `third_party/openrgb` needs `tools/Get-PinnedOpenRgb.ps1` on a fresh checkout; a release build should not depend on `C:\Program Files\OpenRGB`. | Stage 6 installer |
 | O8 | The ProgramData `config.json` was written before some keys existed (`minimumUptimeSeconds`); missing keys take the code defaults. Note this when keys are renamed (migration). | Ongoing |
-| O9 | Effects, profiles, Logon and Lock profiles, ambilight, Agent, UI and the installer: everything from SPEC stages 2-6. | Stages 2-6 |
+| O9 | Logon and Lock profile switching, ambilight Screen mode, Agent, UI and the installer: everything from SPEC stages 3-6. | Stages 3-6 |
 
 ---
 
-## 7. Next: stage 2 (effect engine). Do not start without the owner's go
+## 7. Next: close the stage 2 gate, then stage 3
 
-SPEC section 11, stage 2, covers:
-- the device model with positions;
-- wizard-less config;
-- all effects: Static, Breathing, Wave, Radial, Mirror, Color cycle, Aurora;
-- palettes, FPS caps, change-only writes, per-group brightness and the profile model.
+Stage 2 gate status (branch `stage-2-effects`, installed on the PC, not pushed):
+- CPU: static profile 0.012% (passes). Rainbow at 0.97% with RAM at 5 FPS (passes).
+  - The owner found RAM at 5 FPS too steppy and runs it at 10 FPS with a slower, longer wave (about 1.7%).
+  - That is an accepted trade-off, still below the old 2.58%.
+- Sleep/resume (pulled forward from stage 3): confirmed working by the owner and in the log.
+- Waiting for: the owner's final visual OK on every device, and an answer on whether the mouse should be off (O5).
 
-The default **Rainbow** profile (SPEC 5.3) assigns:
-- radial rainbow to the pump and fans;
-- a right-to-left wave to the keyboard;
-- color cycle to the mouse and GPU;
-- a mirror from the middle of each RAM stick;
-- strip mode to Screen (the ambilight comes in stage 4, so use a fallback until then).
+After the OK:
+1. Update this file (stage 2 passed).
+2. Merge `stage-2-effects` into `main` with `--no-ff` and tag `v0.2.0-stage2`.
+3. Bump `<Version>` in `Directory.Build.props` (still 0.0.1).
+4. Push.
+5. Refresh the README via the skill: show it, wait for "zatwierdzam", then push the `docs/readme-refresh` PR.
 
-**Gate:**
-- CPU with the full Rainbow profile at 30 FPS (RAM 10-15, GPU 10), measured with `tools\Measure-RGBcontroller.ps1` over 60 s idle.
-- Clearly below 2.6%, target below 1.0%; a static profile about 0.0x%.
-- A visual check of every device.
+Stage 3 (SPEC 4, spike R4), what is left:
+- lock and unlock;
+- display off/on (`GUID_CONSOLE_DISPLAY_STATE`);
+- session logon/logoff;
+- the Logon profile on the logon screen and the Lock profile, with the per-device turn-off sets;
+- hibernate and shutdown checks;
+- a better rescan settle (O4).
 
-Starting points in the existing code:
-- Replace `DeviceLighting`'s static color with a render loop that writes through `OpenRgbSdkClient.UpdateLeds`. It already does not allocate; keep `UPDATEMODE` Direct per device.
-- `StripWriter.SetColors` is ready for per-LED frames (rate-limited and change-only).
-- Positions are unknown for the ARGB headers (mapping wizard in stage 5). Use configurable defaults: ring, 20 LEDs, CW. The keyboard matrix 6x22 comes from the controller data.
-- Keep every device's FPS cap. RAM and GPU are I2C/SMBus, so use low FPS and change-only writes (SPEC 9.3).
-- Re-measure CPU the same way as in stage 1.
-
-Branch: `stage-2-effects`. Tag after the gate: `v0.2.0-stage2`.
+Gate: 10 sleep/resume cycles, 10 display-off/on cycles, 3 hibernate cycles, lock/unlock and shutdown, all with no
+blinking and no second OpenRGB.
 
 ---
 
@@ -275,18 +334,17 @@ Branch: `stage-2-effects`. Tag after the gate: `v0.2.0-stage2`.
 2. Paste the prompt below.
 
 ```text
-You are continuing RGBcontroller (Windows RGB + Adalight controller) for the owner Radek. Talk to him in Polish;
-code, comments, commits and docs are in English.
+You are continuing RGBcontroller (Windows RGB + Adalight controller) for the owner Radek. Talk to the owner in
+Polish; code, comments, commits and docs are in English.
 
 Read, in this order: SPEC.md, CLAUDE.md, docs/HANDOFF.md, then docs/spikes/*.md. HANDOFF.md describes exactly what
 exists, the owner's PC state, binding preferences (commits authored only by the owner with the noreply address, no
 Co-Authored-By/Claude attribution anywhere), decisions and open items. Stages 0 and 1 have passed (tags
-v0.0.1-stage0, v0.1.0-stage1); the Service is installed and running on this PC.
+v0.0.1-stage0, v0.1.0-stage1). Stage 2 is at its gate on branch stage-2-effects, which is installed on this PC.
 
-First: run `.\build.ps1 -Test` (expect 95 green tests), check `git status` and that main equals origin/main, and
-check `Get-Service RGBcontroller`. Then report in Polish in a few lines and wait. Do NOT start stage 2 until the
-owner says so. When he does: create branch stage-2-effects, plan stage 2 from SPEC section 11 and HANDOFF.md
-section 7, and stop at the gate with exact test steps.
+First: run `.\build.ps1 -Test` (expect 154 green tests), check `git status` and the branch, and run
+`& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines and
+follow HANDOFF.md section 7.
 ```
 
 Useful commands:
@@ -294,6 +352,9 @@ Useful commands:
 ```powershell
 .\build.ps1 -Test
 & 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --probe
+& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status
+& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --profile "Solid White"
+& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --group RAM --fps 10 --speed 0.08 --scale 0.3
 .\tools\Measure-TimeToFirstLight.ps1 -Last 2
 .\tools\Measure-RGBcontroller.ps1 -Label check -DurationSeconds 60 -OutDir $env:TEMP
 Get-Content (Get-ChildItem C:\ProgramData\RGBcontroller\logs\service-*.log | Sort-Object LastWriteTime)[-1].FullName -Tail 30

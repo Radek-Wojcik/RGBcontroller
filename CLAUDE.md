@@ -24,3 +24,5 @@ Build and test:
 - Dev install on the owner's PC: `install-dev.ps1` / `uninstall-dev.ps1` (elevated, reversible). Live SDK check: `RGBcontroller.Service.exe --probe [--rescan]`. Boot timing: `tools\Measure-TimeToFirstLight.ps1`.
 - OpenRGB `SETCUSTOMMODE` does not touch the hardware; always send `UPDATEMODE` with the Direct mode (see `docs/spikes/R1-R5-R6-stage1.md`).
 - The black screen at boot exists without RGBcontroller (A/B tested); do not chase it in this code.
+- Control the running Service without elevation: `RGBcontroller.Service.exe --status | --profile <name> | --group <name> [--fps N] [--speed X] [--scale X] [--brightness N]`. In PowerShell write decimals with a dot (`0,08` becomes an array).
+- RAM (HyperX over SMBus) is the CPU budget: about 0.16% total CPU per RAM FPS (`docs/spikes/stage2-effects.md`).
