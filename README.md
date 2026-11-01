@@ -2,49 +2,53 @@
 
 Windows controller for PC RGB lighting and an Adalight ambilight strip, built to replace OpenRGB's Effects plugin (about 2.6% CPU) with a background service that targets under 1%.
 
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![Status: stage 1 of 6](https://img.shields.io/badge/status-stage_1_of_6-orange)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![Status: stage 3 of 6](https://img.shields.io/badge/status-stage_3_of_6-orange)
 
-> **Status: stage 1 of 6 done.** A Windows Service lights the Adalight strip and all OpenRGB devices in one static color, already on the logon screen. Effects, power handling, ambilight and the UI come next; see [Roadmap](#roadmap).
+> **Status: stage 3 of 6 done.** A Windows Service runs synchronized effects on the Adalight strip and all OpenRGB devices from the logon screen on. It follows sleep, lock and display off. Screen ambilight, the tray agent, the UI and the installer come next; see [Roadmap](#roadmap).
 
-Service log after a restart on the target PC (Windows started at 13:08:46):
+Service log on the target PC: the user locks the PC, Windows turns the display off, a mouse move wakes it, the user unlocks (device lists shortened):
 
 ```text
-13:08:58.199 [INF] LightingHost: Lighting host starting at 13:08:58.095, system uptime 00:00:12
-13:08:59.249 [INF] LightingHost: First light Adalight strip on COM3 1153 ms after Service start
-13:09:03.256 [INF] OpenRgbSupervisor: Connected to OpenRGB SDK (protocol 5, server 5) 5160 ms after Service start
-13:09:03.260 [INF] DeviceLighting: First light Razer Ornata Chroma V2 (132 LEDs) 5164 ms after Service start; Keyboard=132
-13:09:03.260 [INF] DeviceLighting: Applied #00E5FF to 5 OpenRGB devices
+17:52:29.315 [INF] SituationTracker: Situation Unlocked, display on -> Locked, display on (after SessionLock)
+17:53:46.297 [INF] SituationTracker: Situation Locked, display on -> Locked, display off (after display Off)
+17:53:46.298 [INF] LightingEngine: Rendering profile Rainbow (Locked, display off): strip Off (static); ...;
+                   Razer Ornata Chroma V2 turned off (static); G502 HERO Gaming Mouse turned off (static)
+17:53:49.617 [INF] SituationTracker: Situation Locked, display off -> Locked, display on (after display On)
+17:54:02.228 [INF] SituationTracker: Situation Locked, display on -> Unlocked, display on (after SessionUnlock)
 ```
 
 ## Key features (implemented)
 
-- **Lit before you log in**: a LocalSystem service with automatic start lights the strip 13 s and every OpenRGB device 17 s after boot, before the logon screen appears (measured with [`tools/Measure-TimeToFirstLight.ps1`](tools/Measure-TimeToFirstLight.ps1)).
-- **Exactly one OpenRGB, without the Effects plugin**:
-  - The Service runs a pinned OpenRGB 1.0rc2 copy that has no plugins folder.
-  - It runs headless, bound to `127.0.0.1`, with its own config folder, inside a kill-on-close job object.
-  - Strays are removed; crashes and hung SDKs are restarted with back-off.
-  - Device rescans happen inside the same instance.
-- **Static lighting at 0.000% CPU**: the Service and OpenRGB together averaged 0.000% of the CPU with a static color, compared with 2.58% for OpenRGB with the Effects plugin (same tool, same PC).
-- **Reliable Adalight strip driver**:
-  - Finds the port by USB VID/PID and waits for the board to settle after opening it.
-  - Writes only on change, with a 1 s keep-alive.
-  - Clamps to the serial link's frame rate and applies an estimated current limiter.
-  - Reconnects after the USB device disappears, and always ends with black.
-- **Own OpenRGB SDK client for protocol 5**:
-  - Pushes Direct mode to the hardware with `UPDATEMODE`, sets ARGB zone sizes from the config and requests rescans (packet 140).
-  - Writes LEDs without allocating, and times out instead of hanging.
-  - See the [spike reports](docs/spikes/).
-- **Versioned configuration and IPC**:
-  - Configuration is schema-versioned JSON with migrations, atomic writes and validation (for example, the OpenRGB host must be loopback).
-  - IPC is a JSON-RPC contract with a version handshake.
+- **Effects at a fraction of the old CPU cost**:
+  - The full Rainbow profile uses 0.97% of the whole CPU with the RAM at 5 FPS and about 1.7% with the RAM at 10 FPS.
+  - OpenRGB with the Effects plugin used 2.58% on the same PC; a static profile uses 0.012%.
+  - The RAM's SMBus writes are almost the whole budget, so every device group has its own frame rate cap.
+  - Measured with [`tools/Measure-RGBcontroller.ps1`](tools/Measure-RGBcontroller.ps1); details in [docs/spikes/stage2-effects.md](docs/spikes/stage2-effects.md).
+- **One clock for every device**:
+  - Effects: Static, Breathing, Wave, Radial, Mirror, Color cycle, Aurora, Off, and the device's own hardware modes.
+  - LEDs get positions from zone shapes (matrix, line, ring), so waves and rings line up across the keyboard, RAM, fans and strip.
+  - Writes happen only when colors change, and a static profile lets the render thread sleep.
+- **Lighting that follows the PC's state** (SPEC section 4):
+  - Logon profile on the logon screen, active profile when unlocked, Lock profile when locked.
+  - Display off turns off the strip; display off while locked also turns off the keyboard and mouse. Both sets are configurable.
+  - Black before sleep; after resume the single OpenRGB rescans and all devices return together within about 7 s.
+- **Lit before you log in, with exactly one OpenRGB**:
+  - A LocalSystem service lights the strip 13 s and every OpenRGB device about 17 s after boot.
+  - It supervises a pinned OpenRGB 1.0rc2 without plugins, bound to `127.0.0.1`, inside a kill-on-close job object.
+  - Stray instances are removed, and crashes or a hung SDK lead to a restart with back-off.
+- **Robust against lost writes**:
+  - USB and SMBus writes can be lost without an error, so static frames are sent three times.
+  - Device modes are pushed again 5 s and 30 s after every start, resume and rescan.
+  - The Adalight writer reconnects after the USB device disappears and always ends with black.
+- **Live control without elevation**: `--status`, `--profile` and `--group` talk to the Service over a versioned JSON-RPC named pipe. Changes are applied at once and saved.
 
 ## Tech stack
 
 | Area | Technology |
 |---|---|
 | Runtime | C# on .NET 10 (`net10.0`, `net10.0-windows`), self-contained ReadyToRun service build |
-| Hardware access | OpenRGB 1.0rc2 SDK server (TCP, loopback), Adalight over `System.IO.Ports` |
-| Service | `System.ServiceProcess.ServiceBase`, Win32 job object |
+| Hardware access | OpenRGB 1.0rc2 SDK server (own client, protocol 5, loopback), Adalight over `System.IO.Ports` |
+| Service | `System.ServiceProcess.ServiceBase` with power and session events, `PowerSettingRegisterNotification` for the display state, WTS session queries, Win32 job object |
 | IPC | Named pipes with StreamJsonRpc 2.26 (System.Text.Json formatter) |
 | Logging | Serilog 4.4 with rolling files in `%ProgramData%\RGBcontroller\logs` |
 | Tests | xUnit v3 on Microsoft.Testing.Platform, fake OpenRGB SDK server, fake serial port |
@@ -54,13 +58,14 @@ Service log after a restart on the target PC (Windows started at 13:08:46):
 
 ```mermaid
 flowchart LR
-    S[RGBcontroller.Service<br/>LocalSystem, starts at boot] -->|SDK, 127.0.0.1:6742| O[OpenRGB 1.0rc2<br/>headless, single instance]
+    S[RGBcontroller.Service<br/>LocalSystem, starts at boot<br/>effect engine, power/session policy] -->|SDK, 127.0.0.1:6742| O[OpenRGB 1.0rc2<br/>headless, single instance]
     S -->|Adalight, serial| L[LED strip]
-    A[RGBcontroller.Agent<br/>user session: tray, hotkeys, capture] -->|named pipes| S
-    U[RGBcontroller.UI<br/>on demand] -->|named pipes| S
+    C[--status / --profile / --group] -->|control pipe| S
+    A[RGBcontroller.Agent<br/>user session: tray, hotkeys, capture] -.->|named pipes, stage 4| S
+    U[RGBcontroller.UI<br/>on demand] -.->|named pipes, stage 5| S
 ```
 
-Only the Service touches hardware. It runs without a logged-in user, so lighting starts on the logon screen. The Agent and UI (later stages) talk to it over versioned named-pipe IPC. The full specification is in [SPEC.md](SPEC.md).
+Only the Service touches hardware. It runs without a logged-in user, so lighting starts on the logon screen. The Agent and UI (later stages) will talk to it over the same versioned named-pipe IPC. The full specification is in [SPEC.md](SPEC.md).
 
 ## Getting started
 
@@ -97,13 +102,39 @@ Undo everything and restore the previous OpenRGB autostart:
 
 ## Usage
 
-The static color and the hardware settings live in `%ProgramData%\RGBcontroller\config\config.json`. Only administrators can write this file. Restart the service after editing it.
+Control the running Service from a normal (non-elevated) PowerShell:
+
+```powershell
+$exe = 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe'
+& $exe --status
+& $exe --profile "Solid White"
+& $exe --group RAM --fps 10 --speed 0.08 --scale 0.3
+```
+
+`--group <name> [--in <profile>] [--fps 1-60] [--speed <cycles/s>] [--scale <x>] [--brightness 0-100]` tunes a group live: the frame rate applies to the group in every profile, the other values to its effect in the given profile (default: the active one). In PowerShell, write decimals with a dot (`0,08` becomes an array).
+
+Shipped profiles:
+
+| Profile | Look |
+|---|---|
+| Rainbow | Radial pump and fans, keyboard wave right to left, RAM mirror, color cycle on the mouse, GPU and board, radial strip |
+| Cyberpunk | The Rainbow layout with a pink, cyan and violet palette |
+| Aurora | Slow Aurora effect on every device |
+| Night | Dim warm static colors; board, mouse and GPU off |
+| Solid White | Static white everywhere |
+| Logon | A slower Rainbow, shown on the logon screen |
+
+The configuration lives in `%ProgramData%\RGBcontroller\config\config.json`. Only administrators can write the file; restart the Service after editing it.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `lighting.staticColor` | `#00E5FF` | Color for all devices and the strip |
-| `lighting.stripBrightnessPercent` | `50` | Strip brightness, 100 = full diode power |
-| `lighting.deviceBrightnessPercent` | `100` | Brightness of the OpenRGB devices |
+| `lighting.activeProfile` | `Rainbow` | Profile while a user is logged in and unlocked |
+| `lighting.logonProfile` | `Logon` | Profile on the logon screen |
+| `lighting.lockProfile` | `null` | Profile while locked; `null` = the active profile |
+| `lighting.displayOff.unlocked` | strip | Turned off when the display goes off while unlocked |
+| `lighting.displayOff.locked` | strip, keyboard, mouse | Turned off when the display goes off while locked or on the logon screen |
+| `lighting.groups[].maxFps` | 30 (RAM 5, mouse 15, GPU 10) | Frame rate cap per device group |
+| `openRgb.resumeRescanDelayMilliseconds` | `3000` | Wait after resume before the rescan |
 | `strip.portName` | `null` | COM port override; `null` = find by VID/PID `1A86:7523` |
 | `strip.ledCount` | `113` | LEDs on the strip |
 | `openRgb.zoneSizes` | 3 x 20 | LED counts of the motherboard ARGB headers |
@@ -113,24 +144,24 @@ Diagnostics:
 ```powershell
 & 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --probe --rescan
 .\tools\Measure-TimeToFirstLight.ps1
-.\tools\Measure-RGBcontroller.ps1 -Label static -DurationSeconds 60
+.\tools\Measure-RGBcontroller.ps1 -Label rainbow -DurationSeconds 60
 ```
 
-`--probe` only reads from the running OpenRGB; with `--rescan` it also asks OpenRGB to re-detect the devices and times it.
+`--probe` only reads from the running OpenRGB; with `--rescan` it also asks OpenRGB to re-detect the devices and times it. The Service log in `%ProgramData%\RGBcontroller\logs` records every session, display and power event and the profile rendered for it.
 
 ## Project structure
 
 ```text
 src/
-  RGBcontroller.Core/      config, logging, Adalight frames and strip writer, OpenRGB SDK client
+  RGBcontroller.Core/      config, effects, lighting engine and session policy, Adalight writer, OpenRGB SDK client
   RGBcontroller.Ipc/       JSON-RPC contracts and frame codec shared by all processes
-  RGBcontroller.Service/   Windows Service: OpenRGB supervisor, device lighting, probe
+  RGBcontroller.Service/   Windows Service: OpenRGB supervisor, render loop, power/session/display tracking, control pipe
   RGBcontroller.Agent/     user-session tray agent (skeleton, stage 4)
   RGBcontroller.UI/        on-demand UI shell (skeleton, stage 5)
 tests/RGBcontroller.Tests/ unit tests with a fake OpenRGB SDK server and a fake serial port
 tools/                     pinned OpenRGB copy, CPU and time-to-first-light measurement
 third_party/               pin manifest of OpenRGB 1.0rc2 (the binaries themselves are not committed)
-docs/spikes/               technical spike reports with hardware results
+docs/spikes/               technical spike reports with hardware results, one per stage
 reference/                 verified hardware evidence (test scripts, measurements)
 install-dev.ps1            reversible development install
 ```
@@ -141,20 +172,21 @@ install-dev.ps1            reversible development install
 .\build.ps1 -Test
 ```
 
-The suite has 95 tests. They cover the following:
+The suite has 165 tests. They cover the following:
 - config load, migration, recovery and validation, plus logging;
-- IPC round-trips and the frame codec;
-- Adalight frames: header, color order, brightness, current limiter, no allocations;
-- the strip writer against a fake serial port: reconnect, keep-alive, black on stop;
-- the OpenRGB supervisor against an in-process fake SDK server: Direct mode, zone resize, re-apply after device list changes, restart after a crash or a hung SDK, black on stop.
+- IPC round-trips, the control pipe and the frame codec;
+- Adalight frames and the strip writer against a fake serial port: reconnect, keep-alive, black on stop;
+- effects, LED layouts and the lighting engine: frame rate caps, change-only writes, brightness, hardware modes, no allocations while rendering, static frame repeats;
+- the session policy: logon, lock and active profiles and the display-off turn-off sets;
+- the OpenRGB supervisor against an in-process fake SDK server: Direct mode, zone resize, re-apply after device list changes, resume rescan that waits for all devices, restart after a crash or a hung SDK, black on stop.
 
 ## Roadmap
 
 Each stage ends with a hardware test gate on the target PC.
 
 1. ~~**Service + OpenRGB supervisor + Adalight**: lighting on the logon screen after cold boot, single OpenRGB instance.~~ Done (`v0.1.0-stage1`).
-2. **Effect engine**: Static, Breathing, Wave, Radial, Mirror, Color cycle, Aurora, synchronized across devices, under 1% CPU.
-3. **Power and session handling**: sleep, hibernate, display off, lock and shutdown without flicker or duplicate processes.
+2. ~~**Effect engine**: synchronized effects, profiles, per-group frame rates, live control.~~ Done (`v0.2.0-stage2`).
+3. ~~**Power and session handling**: sleep, lock, display off, logon screen and shutdown.~~ Done (`v0.3.0-stage3`).
 4. **Agent and ambilight**: screen capture with letterbox and HDR handling, tray, global hotkeys.
 5. **UI**: tiles with live previews, device mapping and strip layout wizards, profiles.
 6. **Installer and hardening**.
