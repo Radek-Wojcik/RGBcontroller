@@ -9,7 +9,7 @@ namespace RGBcontroller.Core.Config;
 /// </summary>
 public sealed record AppConfig
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -79,6 +79,9 @@ public sealed record OpenRgbConfig
     /// <summary>Quiet period after a DEVICE_LIST_UPDATED notice before devices are re-read and lit.</summary>
     public int DeviceSettleMilliseconds { get; set; } = 500;
 
+    /// <summary>After resume from sleep, USB devices re-enumerate; wait this long before OpenRGB rescans (SPEC 4).</summary>
+    public int ResumeRescanDelayMilliseconds { get; set; } = 3000;
+
     /// <summary>LED counts for resizable zones (ARGB headers). Applied through the SDK after detection.</summary>
     public IReadOnlyList<ZoneSizeConfig> ZoneSizes { get; set; } =
     [
@@ -95,26 +98,14 @@ public sealed record OpenRgbConfig
         && MinimumUptimeSeconds == other.MinimumUptimeSeconds
         && StartupTimeoutSeconds == other.StartupTimeoutSeconds
         && DeviceSettleMilliseconds == other.DeviceSettleMilliseconds
-        && ZoneSizes.SequenceEqual(other.ZoneSizes);
+        && ResumeRescanDelayMilliseconds == other.ResumeRescanDelayMilliseconds
+        && ListEquality.Equal(ZoneSizes, other.ZoneSizes);
 
     public override int GetHashCode() => HashCode.Combine(ExecutablePath, Host, Port, ZoneSizes.Count);
 }
 
 /// <summary>Configured LED count of one resizable zone, matched by OpenRGB device name and zone name.</summary>
 public sealed record ZoneSizeConfig(string Device, string Zone, int Leds);
-
-/// <summary>Stage 1 lighting: one static color everywhere (effects and profiles arrive in stage 2).</summary>
-public sealed record LightingConfig
-{
-    /// <summary>"#RRGGBB".</summary>
-    public string StaticColor { get; set; } = "#00E5FF";
-
-    /// <summary>0-100; 100 means full diode power (255).</summary>
-    public int DeviceBrightnessPercent { get; set; } = 100;
-
-    /// <summary>0-100; 100 means full diode power (255).</summary>
-    public int StripBrightnessPercent { get; set; } = 50;
-}
 
 public sealed record LoggingConfig
 {

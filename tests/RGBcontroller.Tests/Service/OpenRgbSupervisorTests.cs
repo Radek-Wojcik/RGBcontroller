@@ -1,6 +1,7 @@
 using RGBcontroller.Core.Config;
 using RGBcontroller.Ipc;
 using RGBcontroller.Service;
+using RGBcontroller.Service.Lighting;
 using RGBcontroller.Service.OpenRgb;
 using RGBcontroller.Tests.OpenRgb;
 using Serilog.Core;
@@ -19,6 +20,16 @@ public sealed class OpenRgbSupervisorTests
         Uptime = () => TimeSpan.FromHours(1),
     };
 
+    /// <summary>One static cyan group that claims every zone, like the stage 1 static color.</summary>
+    private static readonly LightingConfig StaticCyan = new()
+    {
+        ActiveProfile = "Test",
+        LogonProfile = "Test",
+        DefaultGroup = "All",
+        Groups = [new GroupConfig { Name = "All" }],
+        Profiles = [new ProfileConfig { Name = "Test", Groups = [new GroupEffectConfig { Group = "All", Effect = EffectKind.Static, Palette = "#00E5FF" }] }],
+    };
+
     [Fact]
     public async Task LightsEveryDeviceInDirectModeWithTheStaticColor()
     {
@@ -26,7 +37,7 @@ public sealed class OpenRgbSupervisorTests
             ControllerDataWriter.Keyboard(), ControllerDataWriter.Motherboard(), ControllerDataWriter.Mouse());
         await using var run = Start(server, out var supervisor, out var launcher);
 
-        await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
+        await WaitUntilAsync(() => supervisor.State == ComponentState.Ok && server.LastColors.Count == 3);
 
         Assert.Equal(1, launcher.StrayKills);
         Assert.Equal(1, launcher.Starts);
@@ -43,7 +54,7 @@ public sealed class OpenRgbSupervisorTests
         await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard(), ControllerDataWriter.Mouse());
         await using var run = Start(server, out var supervisor, out _);
 
-        await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
+        await WaitUntilAsync(() => server.UpdateModeRequests.Count == 2);
 
         var requests = server.UpdateModeRequests.OrderBy(r => r.Device).ToArray();
         Assert.Equal((0u, 0, "Direct", 1u), requests[0]);
@@ -59,7 +70,7 @@ public sealed class OpenRgbSupervisorTests
         var timings = FastTimings with { Uptime = () => DateTime.UtcNow - bootedAt };
         var launcher = new FakeLauncher();
         var config = new OpenRgbConfig { Port = server.Port, MinimumUptimeSeconds = 1 };
-        var supervisor = new OpenRgbSupervisor(launcher, config, new LightingConfig(), new StartupClock(), Logger.None, timings);
+        var supervisor = new OpenRgbSupervisor(launcher, config, NullSink.Instance, new StartupClock(), Logger.None, timings);
         await using var run = new RunningSupervisor(supervisor);
 
         await Task.Delay(500, TestContext.Current.CancellationToken);
@@ -76,7 +87,7 @@ public sealed class OpenRgbSupervisorTests
         await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Motherboard());
         await using var run = Start(server, out var supervisor, out _);
 
-        await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
+        await WaitUntilAsync(() => server.LastColors.ContainsKey(0));
 
         Assert.Equal((0u, 1, 20), Assert.Single(server.ResizeRequests));
         Assert.Equal(21, server.LastColors[0].Length);
@@ -104,6 +115,28 @@ public sealed class OpenRgbSupervisorTests
         await Task.Delay(300, TestContext.Current.CancellationToken);
         Assert.Equal(appliedBefore + 1, Volatile.Read(ref applied));
         Assert.Equal(updatesBefore + 2, server.LedUpdates.Count);
+    }
+
+    [Fact]
+    public async Task Resume_RescansInTheSameOpenRgbAndResendsModes()
+    {
+        // After sleep the RAM ran its own rainbow (blinking against our frames) and the GPU stayed dark until the
+        // modes were pushed again.
+        await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard(), ControllerDataWriter.Mouse());
+        await using var run = Start(server, out var supervisor, out var launcher);
+        var applied = 0;
+        supervisor.DevicesApplied += _ => Interlocked.Increment(ref applied);
+        await WaitUntilAsync(() => server.UpdateModeRequests.Count == 2);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        var appliedBefore = Volatile.Read(ref applied);
+
+        supervisor.NotifyResumed();
+
+        await WaitUntilAsync(() => Volatile.Read(ref applied) == appliedBefore + 1 && server.UpdateModeRequests.Count == 4);
+        Assert.Equal(1, Volatile.Read(ref server.RescanRequests));
+        Assert.Equal(1, launcher.Starts);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.Equal(appliedBefore + 1, Volatile.Read(ref applied));
     }
 
     [Fact]
@@ -143,7 +176,7 @@ public sealed class OpenRgbSupervisorTests
     {
         await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard());
         var run = Start(server, out var supervisor, out var launcher);
-        await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
+        await WaitUntilAsync(() => server.LastColors.ContainsKey(0));
 
         await run.DisposeAsync();
 
@@ -157,7 +190,7 @@ public sealed class OpenRgbSupervisorTests
     {
         var launcher = new FakeLauncher();
         var config = new OpenRgbConfig { Port = 1, StartupTimeoutSeconds = 5 };
-        var supervisor = new OpenRgbSupervisor(launcher, config, new LightingConfig(), new StartupClock(), Logger.None,
+        var supervisor = new OpenRgbSupervisor(launcher, config, NullSink.Instance, new StartupClock(), Logger.None,
             FastTimings with { ConnectAttemptTimeout = TimeSpan.FromMilliseconds(100) });
         using var stop = new CancellationTokenSource();
         var task = supervisor.RunAsync(stop.Token);
@@ -173,9 +206,11 @@ public sealed class OpenRgbSupervisorTests
         FakeOpenRgbServer server, out OpenRgbSupervisor supervisor, out FakeLauncher launcher, SupervisorTimings? timings = null)
     {
         launcher = new FakeLauncher();
-        var config = new OpenRgbConfig { Port = server.Port, DeviceSettleMilliseconds = 100 };
-        supervisor = new OpenRgbSupervisor(launcher, config, new LightingConfig(), new StartupClock(), Logger.None, timings ?? FastTimings);
-        return new RunningSupervisor(supervisor);
+        var config = new OpenRgbConfig { Port = server.Port, DeviceSettleMilliseconds = 100, ResumeRescanDelayMilliseconds = 50 };
+        var lighting = new LightingController(StaticCyan, strip: null, stripLedCount: 0, Logger.None);
+        lighting.Start();
+        supervisor = new OpenRgbSupervisor(launcher, config, lighting, new StartupClock(), Logger.None, timings ?? FastTimings);
+        return new RunningSupervisor(supervisor, lighting);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
@@ -192,9 +227,11 @@ public sealed class OpenRgbSupervisorTests
     {
         private readonly CancellationTokenSource _stop = new();
         private readonly Task _task;
+        private readonly LightingController? _lighting;
 
-        public RunningSupervisor(OpenRgbSupervisor supervisor)
+        public RunningSupervisor(OpenRgbSupervisor supervisor, LightingController? lighting = null)
         {
+            _lighting = lighting;
             _task = supervisor.RunAsync(_stop.Token);
         }
 
@@ -206,7 +243,21 @@ public sealed class OpenRgbSupervisorTests
                 await _task;
             }
 
+            _lighting?.Dispose();
             _stop.Dispose();
+        }
+    }
+
+    private sealed class NullSink : IDeviceLightingSink
+    {
+        public static NullSink Instance { get; } = new();
+
+        public void Attach(RGBcontroller.Core.OpenRgb.OpenRgbSdkClient client, IReadOnlyList<RGBcontroller.Core.OpenRgb.ControllerData> devices)
+        {
+        }
+
+        public void Detach()
+        {
         }
     }
 
