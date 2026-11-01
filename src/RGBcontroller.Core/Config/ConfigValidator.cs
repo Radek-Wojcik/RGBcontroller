@@ -56,6 +56,7 @@ public static partial class ConfigValidator
         CheckRange(errors, "openRgb.startupTimeoutSeconds", openRgb.StartupTimeoutSeconds, 5, 300);
         CheckRange(errors, "openRgb.minimumUptimeSeconds", openRgb.MinimumUptimeSeconds, 0, 600);
         CheckRange(errors, "openRgb.deviceSettleMilliseconds", openRgb.DeviceSettleMilliseconds, 0, 10_000);
+        CheckRange(errors, "openRgb.resumeRescanDelayMilliseconds", openRgb.ResumeRescanDelayMilliseconds, 0, 30_000);
         CheckRange(errors, "strip.keepAliveMilliseconds", strip.KeepAliveMilliseconds, 100, 60_000);
         foreach (var zone in openRgb.ZoneSizes)
         {
@@ -67,14 +68,7 @@ public static partial class ConfigValidator
             CheckRange(errors, $"openRgb.zoneSizes '{zone.Zone}'", zone.Leds, 0, MaxStripLeds);
         }
 
-        var lighting = config.Lighting;
-        if (!RgbColor.TryParseHex(lighting.StaticColor, out _))
-        {
-            errors.Add($"lighting.staticColor '{lighting.StaticColor}' must be #RRGGBB.");
-        }
-
-        CheckRange(errors, "lighting.deviceBrightnessPercent", lighting.DeviceBrightnessPercent, 0, 100);
-        CheckRange(errors, "lighting.stripBrightnessPercent", lighting.StripBrightnessPercent, 0, 100);
+        ValidateLighting(errors, config.Lighting);
 
         if (!Enum.IsDefined(config.Logging.MinimumLevel))
         {

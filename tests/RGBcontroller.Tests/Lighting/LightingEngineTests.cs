@@ -1,0 +1,264 @@
+using RGBcontroller.Core;
+using RGBcontroller.Core.Config;
+using RGBcontroller.Core.Lighting;
+using RGBcontroller.Core.OpenRgb;
+using RGBcontroller.Tests.OpenRgb;
+using Serilog.Core;
+
+namespace RGBcontroller.Tests.Lighting;
+
+public sealed class LightingEngineTests
+{
+    private static readonly ControllerData Keyboard = ControllerDataWriter.Keyboard() with { Name = DefaultLighting.Keyboard };
+    private static readonly ControllerData Ram = LedLayoutBuilderTests.Ram();
+    private static readonly ControllerData Mouse = ControllerDataWriter.Mouse();
+
+    [Fact]
+    public void StaticProfile_RendersOnceThenIdles()
+    {
+        var engine = Engine(Config("Solid White"));
+        engine.SetDevices([Keyboard, Ram]);
+        var output = new RecordingOutput();
+
+        var next = engine.Render(TimeSpan.Zero, output);
+
+        Assert.Null(next);
+        Assert.Equal(1, output.LedWrites[0]);
+        Assert.Equal(1, output.LedWrites[1]);
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
+        Assert.Equal([(0, "Direct"), (1, "Direct")], output.Modes);
+
+        engine.Render(TimeSpan.FromSeconds(5), output);
+        Assert.Equal(1, output.LedWrites[0]);
+        Assert.Equal(2, output.Modes.Count);
+    }
+
+    [Fact]
+    public void RainbowProfile_RespectsPerGroupFrameRates()
+    {
+        var engine = Engine(Config(DefaultLighting.RainbowProfile));
+        engine.SetDevices([Keyboard, Ram]);
+        var output = new RecordingOutput();
+
+        var now = TimeSpan.Zero;
+        while (now < TimeSpan.FromSeconds(2))
+        {
+            var next = engine.Render(now, output);
+            Assert.NotNull(next);
+            now += next.Value;
+        }
+
+        Assert.InRange(output.LedWrites[0], 58, 62); // keyboard 30 FPS
+        Assert.InRange(output.LedWrites[1], 9, 11); // RAM 5 FPS
+    }
+
+    [Fact]
+    public void WritesOnlyWhenColorsChange()
+    {
+        var config = Config(DefaultLighting.RainbowProfile);
+        var slow = config.Profiles[0] with
+        {
+            Groups = [new GroupEffectConfig { Group = DefaultLighting.KeyboardGroup, Effect = EffectKind.ColorCycle, Speed = 0.0001 }],
+        };
+        var engine = Engine(config with { Profiles = [slow] });
+        engine.SetDevices([Keyboard]);
+        var output = new RecordingOutput();
+
+        for (var frame = 0; frame < 30; frame++)
+        {
+            engine.Render(TimeSpan.FromSeconds(frame / 30.0), output);
+        }
+
+        Assert.Equal(1, output.LedWrites[0]);
+    }
+
+    [Fact]
+    public void Brightness_IsGroupTimesMaster()
+    {
+        var config = Config("Solid White");
+        var profile = config.FindProfile("Solid White")! with
+        {
+            MasterBrightnessPercent = 50,
+            Groups = [new GroupEffectConfig { Group = DefaultLighting.KeyboardGroup, Palette = "#FFFFFF", BrightnessPercent = 50 }],
+        };
+        var engine = Engine(config with { Profiles = [profile] });
+        engine.SetDevices([Keyboard]);
+        var output = new RecordingOutput();
+
+        engine.Render(TimeSpan.Zero, output);
+
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(64, 64, 64), c));
+    }
+
+    [Fact]
+    public void UnclaimedZones_StayOffUnlessADefaultGroupExists()
+    {
+        var config = Config("Solid White");
+        var output = new RecordingOutput();
+        var engine = Engine(config);
+        engine.SetDevices([Mouse with { Name = "Unknown mouse" }]);
+
+        engine.Render(TimeSpan.Zero, output);
+        Assert.All(output.Leds[0], c => Assert.Equal(RgbColor.Black, c));
+
+        engine.SetConfig(config with { DefaultGroup = DefaultLighting.KeyboardGroup });
+        engine.Render(TimeSpan.Zero, output);
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
+    }
+
+    [Fact]
+    public void HardwareMode_SetsTheDeviceModeAndWritesNoLeds()
+    {
+        var config = Config(DefaultLighting.RainbowProfile);
+        var profile = config.Profiles[0] with
+        {
+            Groups = [new GroupEffectConfig { Group = DefaultLighting.RamGroup, Effect = EffectKind.Hardware, HardwareMode = "rainbow" }],
+        };
+        var engine = Engine(config with { Profiles = [profile] });
+        engine.SetDevices([Ram]);
+        var output = new RecordingOutput();
+
+        var next = engine.Render(TimeSpan.Zero, output);
+
+        Assert.Null(next);
+        Assert.Equal([(0, "Rainbow")], output.Modes);
+        Assert.False(output.LedWrites.ContainsKey(0));
+    }
+
+    [Fact]
+    public void Modes_AreResentAfterReEnumerationButNotAfterAProfileSwitch()
+    {
+        var config = Config(DefaultLighting.RainbowProfile);
+        var engine = Engine(config);
+        var output = new RecordingOutput();
+        engine.SetDevices([Keyboard]);
+        engine.Render(TimeSpan.Zero, output);
+
+        engine.SetConfig(config with { ActiveProfile = "Solid White" });
+        engine.Render(TimeSpan.FromSeconds(1), output);
+        Assert.Single(output.Modes);
+
+        engine.SetDevices([Keyboard]);
+        engine.Render(TimeSpan.FromSeconds(2), output);
+        Assert.Equal(2, output.Modes.Count);
+    }
+
+    [Fact]
+    public void ClearDevices_StopsAllDeviceWrites()
+    {
+        var engine = Engine(Config(DefaultLighting.RainbowProfile));
+        var output = new RecordingOutput();
+        engine.SetDevices([Keyboard]);
+        engine.Render(TimeSpan.Zero, output);
+
+        engine.ClearDevices();
+        engine.Render(TimeSpan.FromSeconds(1), output);
+
+        Assert.Equal(1, output.LedWrites[0]);
+    }
+
+    [Fact]
+    public void Strip_ScreenModeFallsBackToRadialAndSolidUsesItsOwnPower()
+    {
+        var config = Config(DefaultLighting.RainbowProfile);
+        var engine = Engine(config, stripLeds: 113);
+        var output = new RecordingOutput();
+
+        Assert.NotNull(engine.Render(TimeSpan.Zero, output));
+        Assert.Equal(1, output.StripWrites);
+        Assert.Equal(113, output.Strip.Length);
+
+        var solid = config.Profiles[0] with
+        {
+            MasterBrightnessPercent = 50,
+            Ambilight = new AmbilightConfig { Mode = AmbilightMode.Solid, SolidColor = "#FF0000", SolidBrightnessPercent = 100, BrightnessPercent = 10 },
+        };
+        engine.SetConfig(config with { Profiles = [solid] });
+        Assert.Null(engine.Render(TimeSpan.FromSeconds(1), output));
+        Assert.All(output.Strip, c => Assert.Equal(new RgbColor(128, 0, 0), c));
+    }
+
+    [Fact]
+    public void Blackout_SendsBlackOnceThenReturnsToTheProfile()
+    {
+        var engine = Engine(Config(DefaultLighting.RainbowProfile), stripLeds: 113);
+        engine.SetDevices([Keyboard]);
+        var output = new RecordingOutput();
+        engine.Render(TimeSpan.Zero, output);
+
+        engine.SetBlackout(true);
+        Assert.Null(engine.Render(TimeSpan.FromSeconds(1), output));
+        Assert.All(output.Leds[0], c => Assert.Equal(RgbColor.Black, c));
+        Assert.All(output.Strip, c => Assert.Equal(RgbColor.Black, c));
+        var writes = output.LedWrites[0];
+        Assert.Null(engine.Render(TimeSpan.FromSeconds(2), output));
+        Assert.Equal(writes, output.LedWrites[0]);
+
+        engine.SetBlackout(false);
+        Assert.NotNull(engine.Render(TimeSpan.FromSeconds(3), output));
+        Assert.Contains(output.Leds[0], c => c != RgbColor.Black);
+    }
+
+    [Fact]
+    public void Render_DoesNotAllocate()
+    {
+        var engine = Engine(Config(DefaultLighting.RainbowProfile), stripLeds: 113);
+        engine.SetDevices([Keyboard, Ram, Mouse with { Name = DefaultLighting.Mouse }, LedLayoutBuilderTests.Board(60)]);
+        var output = new RecordingOutput();
+        var now = TimeSpan.Zero;
+        for (var i = 0; i < 10; i++)
+        {
+            now += engine.Render(now, output) ?? TimeSpan.FromMilliseconds(10);
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 500; i++)
+        {
+            now += engine.Render(now, output) ?? TimeSpan.FromMilliseconds(10);
+        }
+
+        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+    }
+
+    private static LightingEngine Engine(LightingConfig config, int stripLeds = 0) => new(config, stripLeds, 30, Logger.None);
+
+    private static LightingConfig Config(string activeProfile) => new() { ActiveProfile = activeProfile };
+
+    /// <summary>Records writes into buffers sized up front, so it does not allocate while the engine renders.</summary>
+    private sealed class RecordingOutput : ILightingOutput
+    {
+        public Dictionary<int, int> LedWrites { get; } = [];
+
+        public Dictionary<int, RgbColor[]> Leds { get; } = [];
+
+        public List<(int Device, string Mode)> Modes { get; } = [];
+
+        public RgbColor[] Strip { get; private set; } = [];
+
+        public int StripWrites { get; private set; }
+
+        public void SetDeviceMode(int deviceIndex, int modeIndex, ControllerMode mode) => Modes.Add((deviceIndex, mode.Name));
+
+        public void SetDeviceLeds(int deviceIndex, ReadOnlySpan<RgbColor> colors)
+        {
+            if (!Leds.TryGetValue(deviceIndex, out var buffer) || buffer.Length != colors.Length)
+            {
+                Leds[deviceIndex] = buffer = new RgbColor[colors.Length];
+            }
+
+            colors.CopyTo(buffer);
+            LedWrites[deviceIndex] = LedWrites.GetValueOrDefault(deviceIndex) + 1;
+        }
+
+        public void SetStripLeds(ReadOnlySpan<RgbColor> colors)
+        {
+            if (Strip.Length != colors.Length)
+            {
+                Strip = new RgbColor[colors.Length];
+            }
+
+            colors.CopyTo(Strip);
+            StripWrites++;
+        }
+    }
+}
