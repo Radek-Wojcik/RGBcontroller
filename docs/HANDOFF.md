@@ -1,7 +1,7 @@
 # RGBcontroller: project state and handoff
 
-Last updated: 2026-11-01, during the stage 2 gate. **Read this file right after `SPEC.md` and `CLAUDE.md` when you
-start a new session.** It records everything that was built, decided and learned in stages 0-1, the exact state of
+Last updated: 2026-11-01, after the stage 2 gate. **Read this file right after `SPEC.md` and `CLAUDE.md` when you
+start a new session.** It records everything that was built, decided and learned in stages 0-2, the exact state of
 the owner's PC, and what to do next. `SPEC.md` stays the source of truth for requirements. This file is the source
 of truth for **what exists now**.
 
@@ -13,10 +13,13 @@ of truth for **what exists now**.
 |---|---|---|---|
 | 0. Foundation | **Passed** (2026-10-30) | `v0.0.1-stage0` | `docs/spikes/R2-R3-openrgb-sdk.md` |
 | 1. Service + OpenRGB supervisor + Adalight | **Passed** (2026-10-31) | `v0.1.0-stage1` | `docs/spikes/R1-R5-R6-stage1.md` |
-| 2. Effect engine (+ sleep/resume pulled forward) | **Gate in progress**: CPU measured, resume confirmed by the owner, waiting for the final OK | | `docs/spikes/stage2-effects.md` |
-| 3-6 | Not started | | |
+| 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
+| 3. Power, session, display | **Next.** Suspend/resume is already done; lock, display, logon/Lock profiles remain | | |
+| 4-6 | Not started | | |
 
-What works today on the owner's PC (branch `stage-2-effects` installed, not merged yet):
+What works today on the owner's PC:
+- The installed build is commit `7aa4471` (stage 2 code). The tag only adds docs and the version bump to 0.2.0,
+  so `--status` still reports 0.0.1 until the next `install-dev.ps1`.
 - The Windows Service `RGBcontroller` (LocalSystem, automatic start) lights the strip and all 5 OpenRGB devices
   before the logon screen.
 - Effects run from profiles. The active profile is **Rainbow**: radial pump/fans, keyboard wave right to left,
@@ -32,14 +35,16 @@ What works today on the owner's PC (branch `stage-2-effects` installed, not merg
   the named pipe, without elevation.
 
 Repository: <https://github.com/Radek-Wojcik/RGBcontroller> (**private**, no LICENSE file: "All rights reserved").
-- `main` is up to date and contains the merged `stage-1-service` branch and PR #1 (the README refresh).
-- The branch `stage-1-service` (local and on origin) is merged and can be deleted.
+- `main` contains the merged `stage-1-service` and `stage-2-effects` branches (`--no-ff`) and is pushed, with tag
+  `v0.2.0-stage2`.
+- The branches `stage-1-service` and `stage-2-effects` are merged and can be deleted.
+- **The README was not refreshed for stage 2 yet**: it is the first task of the next session (section 7).
 
 ---
 
 ## 2. Owner preferences and working rules (binding)
 
-These come from the owner during stages 0-1 and add to `CLAUDE.md`:
+These come from the owner during stages 0-2 and add to `CLAUDE.md`:
 
 - **Talk to the owner in Polish.** Code, comments, commits and docs are in English.
 - **Commit author is the owner only.** Use `Radek Wójcik <124835720+Radek-Wojcik@users.noreply.github.com>`; it is already set as the repo-local git identity.
@@ -62,6 +67,12 @@ These come from the owner during stages 0-1 and add to `CLAUDE.md`:
     `TuneGroupAsync`.
   - Sleep/resume bugs are the owner's top priority.
 - **In PowerShell, decimal numbers need a dot** (`--speed 0.08`); `0,08` becomes an array.
+- **Tooling note for the AI:** in the Bash tool (Git Bash), long `python - <<'EOF'` heredocs containing C# code failed
+  twice with "unexpected EOF". Write such edit scripts to the scratchpad with the Write tool and run
+  `python <file>` instead.
+- **Elevated install, the way the owner accepts it** (they click UAC):
+  `Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',"Start-Transcript <scratchpad>\install.log; Set-Location '<repo>'; .\install-dev.ps1; Stop-Transcript" -PassThru`,
+  then `WaitForExit()` and read the transcript. If the UAC prompt is cancelled, ask before retrying.
 - **Never touch fan or pump control.**
   - The owner mentioned fans "spinning up hard then going quiet/dark" at power-on.
   - It is still open whether they meant RPM (BIOS behaviour before FanControl starts) or the LEDs (ASUS power-on effect before the Service lights them). Either way it is not caused by the app, which never controls fans.
@@ -299,32 +310,46 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 
 ---
 
-## 7. Next: close the stage 2 gate, then stage 3
+## 7. Next steps
 
-Stage 2 gate status (branch `stage-2-effects`, installed on the PC, not pushed):
-- CPU: static profile 0.012% (passes). Rainbow at 0.97% with RAM at 5 FPS (passes).
-  - The owner found RAM at 5 FPS too steppy and runs it at 10 FPS with a slower, longer wave (about 1.7%).
-  - That is an accepted trade-off, still below the old 2.58%.
-- Sleep/resume (pulled forward from stage 3): confirmed working by the owner and in the log.
-- Waiting for: the owner's final visual OK on every device, and an answer on whether the mouse should be off (O5).
-
-After the OK:
-1. Update this file (stage 2 passed).
-2. Merge `stage-2-effects` into `main` with `--no-ff` and tag `v0.2.0-stage2`.
-3. Bump `<Version>` in `Directory.Build.props` (still 0.0.1).
-4. Push.
-5. Refresh the README via the skill: show it, wait for "zatwierdzam", then push the `docs/readme-refresh` PR.
-
-Stage 3 (SPEC 4, spike R4), what is left:
-- lock and unlock;
-- display off/on (`GUID_CONSOLE_DISPLAY_STATE`);
-- session logon/logoff;
-- the Logon profile on the logon screen and the Lock profile, with the per-device turn-off sets;
-- hibernate and shutdown checks;
-- a better rescan settle (O4).
-
-Gate: 10 sleep/resume cycles, 10 display-off/on cycles, 3 hibernate cycles, lock/unlock and shutdown, all with no
-blinking and no second OpenRGB.
+1. **README refresh for stage 2** (the gate is passed; user-visible behaviour changed):
+   - Use the `anthropic-skills:publikowanie-projektow-github` skill.
+   - Content: effects and profiles, the `--status` / `--profile` / `--group` commands, sleep/resume, the CPU table.
+   - Show the README to the owner and wait for "zatwierdzam".
+   - Then push a `docs/readme-refresh` branch, open a PR without Claude attribution, and merge it.
+2. **Ask the owner** (left open at the stage 2 gate):
+   - Should the G502 mouse be off (O5)? If yes, set the `Mouse` group's effect to `Off` in the profiles via a config
+     edit (no IPC for effect kinds yet).
+   - Is the Adalight USB problem (O10) fixed after changing the port or cable?
+3. **Stage 3** (SPEC 4, spike R4) on a new branch `stage-3-power`. Suspend/resume is already done.
+   - **Spike R4:** `RegisterServiceCtrlHandlerEx` / `ServiceBase` session change events, plus
+     `RegisterPowerSettingNotification(GUID_CONSOLE_DISPLAY_STATE, DEVICE_NOTIFY_SERVICE_HANDLE)` for display
+     on/off. Log every event to the service log over 10 cycles, including on the logon screen.
+     - `ServiceBase` needs `CanHandleSessionChangeEvent = true`.
+     - Display state is not surfaced by `ServiceBase`: register the power setting notification with the service
+       status handle and handle `SERVICE_CONTROL_POWEREVENT` with `PBT_POWERSETTINGCHANGE`. That likely means
+       overriding the control handler (custom `RegisterServiceCtrlHandlerEx`); check what .NET's `ServiceBase` lets
+       you hook.
+   - **Behaviour (SPEC 4 table):**
+     - logon screen: Logon profile (`lighting.logonProfile`, shipped "Logon");
+     - user logged in: active profile;
+     - locked with the display on: Lock profile (`lighting.lockProfile`; null means active), strip in fallback mode;
+     - locked with the display off: strip, keyboard and mouse off;
+     - display off while unlocked: strip off, other devices per device setting;
+     - restore when the display turns on.
+   - **Config needed:** per-device turn-off sets (two lists: display off while unlocked, display off while
+     locked) with the SPEC defaults. Add them to `lighting` (schema stays 2 if only new keys with defaults are
+     added).
+   - **Engine:** a per-target forced "off" overlay (like `SetBlackout`, but per device or group); profile selection
+     by session state in `LightingHost`.
+   - **O4:** after a rescan, wait for the expected device set (or a longer quiet period) before applying, so all 5
+     devices return together.
+   - **Also check:** hibernate (3 cycles), shutdown black (already done in `OnShutdown`), Fast Startup is off on this
+     PC.
+   - **Gate:** 10 sleep/resume, 10 display-off/on, 3 hibernate, lock/unlock and shutdown. No blinking, no second
+     OpenRGB, everything back within a few seconds. Read the logs yourself; the owner only looks at the hardware.
+4. After stage 3: stage 4 (Agent, tray, hotkeys, ambilight Screen mode, IPC frame pipe), then stage 5 (UI, which
+   must expose speed, scale and FPS per group via `TuneGroupAsync`), then stage 6 (installer).
 
 ---
 
@@ -339,12 +364,13 @@ Polish; code, comments, commits and docs are in English.
 
 Read, in this order: SPEC.md, CLAUDE.md, docs/HANDOFF.md, then docs/spikes/*.md. HANDOFF.md describes exactly what
 exists, the owner's PC state, binding preferences (commits authored only by the owner with the noreply address, no
-Co-Authored-By/Claude attribution anywhere), decisions and open items. Stages 0 and 1 have passed (tags
-v0.0.1-stage0, v0.1.0-stage1). Stage 2 is at its gate on branch stage-2-effects, which is installed on this PC.
+Co-Authored-By/Claude attribution anywhere), decisions and open items. Stages 0-2 have passed (tags v0.0.1-stage0,
+v0.1.0-stage1, v0.2.0-stage2); the Service with the effect engine is installed and running on this PC.
 
-First: run `.\build.ps1 -Test` (expect 154 green tests), check `git status` and the branch, and run
-`& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines and
-follow HANDOFF.md section 7.
+First: run `.\build.ps1 -Test` (expect 154 green tests), check `git status` and that main equals origin/main, and
+run `& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines,
+ask the two open questions from HANDOFF.md section 7, and propose the README refresh. Start stage 3 only when the
+owner says so.
 ```
 
 Useful commands:
