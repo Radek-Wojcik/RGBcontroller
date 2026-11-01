@@ -82,7 +82,7 @@ internal sealed class SituationTracker : IDisposable
 
     private void OnDisplayState(DisplayState state)
     {
-        _log.Information("Display event {State}", state);
+        _log.Information("Display event {State:l}", state.ToString());
 
         // Dimmed is the warning before the idle timeout; the user still sees the screen.
         Update($"display {state}", _querySession(), state != DisplayState.Off);
