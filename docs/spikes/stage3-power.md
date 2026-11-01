@@ -58,7 +58,7 @@ investigated); the lock profile is shown for that time, which is invisible while
 - Once, after power-cycling, COM3 accepted writes but the strip stayed dark; replugging or power-cycling the LED
   BOX resets its Arduino. Suspected cause: power/ground of the LED BOX or the USB cable (open item O10).
 
-## Not yet covered by the gate
+## Gate
 
-- The SPEC gate asks for 10 sleep/resume cycles and 3 hibernate cycles; the logs show 3 sleeps and no hibernate
-  so far (the owner reported "everything works").
+Passed on 2026-11-01. The SPEC gate asks for 10 sleep/resume cycles and 3 hibernate cycles; the logs show 3 sleeps
+and no hibernate. The owner reported "everything works" and closed the gate without the remaining cycles.
