@@ -23,15 +23,24 @@ internal interface IDeviceLightingSink
 /// </summary>
 internal sealed class LightingController : IDeviceLightingSink, IDisposable
 {
+    /// <summary>
+    /// After each attach (start, resume, rescan) modes and frames are sent again at these times: at cold boot one RAM
+    /// stick missed its Direct mode over SMBus and stayed dark. 30 s also covers the logon, when other tools start.
+    /// </summary>
+    private static readonly TimeSpan[] ResendDelays = [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30)];
+
     private readonly LightingEngine _engine;
     private readonly HardwareOutput _output;
     private readonly RenderLoop _loop;
+    private readonly Timer _resend;
+    private int _resendStep;
 
     public LightingController(LightingConfig config, StripWriter? strip, int stripLedCount, ILogger log)
     {
         _output = new HardwareOutput(strip, log);
         _engine = new LightingEngine(config, strip is null ? 0 : stripLedCount, strip?.EffectiveMaxFps ?? 30, log);
         _loop = new RenderLoop(_engine, _output, log);
+        _resend = new Timer(_ => OnResend());
     }
 
     public LightingConfig Config => _engine.Config;
@@ -72,18 +81,35 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
         _output.Client = client;
         _engine.SetDevices(devices);
         _loop.Wake();
+        _resendStep = 0;
+        _resend.Change(ResendDelays[0], Timeout.InfiniteTimeSpan);
     }
 
     public void Detach()
     {
+        _resend.Change(Timeout.Infinite, Timeout.Infinite);
         _engine.ClearDevices();
         _output.Client = null;
+    }
+
+    private void OnResend()
+    {
+        _engine.ResendAll();
+        _loop.Wake();
+        if (++_resendStep < ResendDelays.Length)
+        {
+            _resend.Change(ResendDelays[_resendStep] - ResendDelays[_resendStep - 1], Timeout.InfiniteTimeSpan);
+        }
     }
 
     /// <summary>Ends the render loop; afterwards nothing is written to the strip or OpenRGB.</summary>
     public void Stop() => _loop.Stop();
 
-    public void Dispose() => _loop.Dispose();
+    public void Dispose()
+    {
+        _resend.Dispose();
+        _loop.Dispose();
+    }
 
     /// <summary>Writes engine frames to the current SDK connection and the strip writer.</summary>
     private sealed class HardwareOutput(StripWriter? strip, ILogger log) : ILightingOutput

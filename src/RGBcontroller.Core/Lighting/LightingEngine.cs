@@ -129,6 +129,22 @@ public sealed class LightingEngine
         }
     }
 
+    /// <summary>
+    /// Sends every device mode and frame again on the next <see cref="Render"/>, without a rebuild. A mode write over
+    /// SMBus can be lost at cold boot (one RAM stick stayed dark until its Direct mode was pushed again).
+    /// </summary>
+    public void ResendAll()
+    {
+        lock (_gate)
+        {
+            _sentModes.Clear();
+            foreach (var target in _targets)
+            {
+                target.Dirty = true;
+            }
+        }
+    }
+
     /// <summary>Stops all device writes (rescan in progress, connection lost). Returns after any frame in flight is done.</summary>
     public void ClearDevices() => SetDevices([]);
 

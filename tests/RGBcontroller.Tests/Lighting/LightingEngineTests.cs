@@ -154,6 +154,22 @@ public sealed class LightingEngineTests
     }
 
     [Fact]
+    public void ResendAll_PushesModesAndFramesAgain()
+    {
+        var engine = Engine(Config("Solid White"));
+        engine.SetDevices([Keyboard, Ram]);
+        var output = new RecordingOutput();
+        engine.Render(TimeSpan.Zero, output);
+        var writes = output.LedWrites[1];
+
+        engine.ResendAll();
+        engine.Render(TimeSpan.FromSeconds(5), output);
+
+        Assert.Equal(4, output.Modes.Count);
+        Assert.Equal(writes + 1, output.LedWrites[1]);
+    }
+
+    [Fact]
     public void ClearDevices_StopsAllDeviceWrites()
     {
         var engine = Engine(Config(DefaultLighting.RainbowProfile));
