@@ -57,6 +57,7 @@ public sealed class LightingEngine
     private bool _blackout;
     private LightingSituation _situation = LightingSituation.Default;
     private bool _allOff;
+    private bool _stripTest;
     private bool _screenLive;
     private Target? _screenTarget;
 
@@ -99,6 +100,22 @@ public sealed class LightingEngine
             if (_allOff != off)
             {
                 _allOff = off;
+                _rebuild = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows the strip identification pattern instead of the profile (SPEC 7.5): the first 3 LEDs green, the last 3
+    /// red and every 10th LED white, so the start, the direction and the corners can be read off the strip.
+    /// </summary>
+    public void SetStripTest(bool on)
+    {
+        lock (_gate)
+        {
+            if (_stripTest != on)
+            {
+                _stripTest = on;
                 _rebuild = true;
             }
         }
@@ -345,7 +362,7 @@ public sealed class LightingEngine
         var targets = new List<Target>(_devices.Count + 1);
         if (_stripLedCount > 0)
         {
-            targets.Add(BuildStrip(profile, config, off.Strip, now));
+            targets.Add(_stripTest && !_blackout ? BuildStripTest(now) : BuildStrip(profile, config, off.Strip, now));
         }
 
         for (var index = 0; index < _devices.Count; index++)
@@ -390,6 +407,21 @@ public sealed class LightingEngine
         }
 
         return target;
+    }
+
+    private Target BuildStripTest(TimeSpan now)
+    {
+        var pattern = new RgbColor[_stripLedCount];
+        for (var i = 0; i < pattern.Length; i++)
+        {
+            pattern[i] = i < 3 ? new RgbColor(0, 255, 0)
+                : i >= pattern.Length - 3 ? new RgbColor(255, 0, 0)
+                : i % 10 == 0 ? new RgbColor(255, 255, 255)
+                : default;
+        }
+
+        Binding[] bindings = [new Binding(0, _stripLedCount, new ScreenFeedEffect(pattern), Brightness(50, 100))];
+        return new Target(Target.Strip, "strip test pattern", _stripPoints, bindings, _stripMaxFps, now);
     }
 
     private Target BuildDevice(

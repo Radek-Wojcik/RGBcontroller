@@ -151,6 +151,10 @@ public sealed class ControlServerTests
 
         public string? StepProfile(int delta) => null;
 
+        public void ShowStripTest(TimeSpan duration)
+        {
+        }
+
         private readonly string[] _profiles = ["Rainbow", "Night"];
 
         public string Active { get; private set; } = "Rainbow";
