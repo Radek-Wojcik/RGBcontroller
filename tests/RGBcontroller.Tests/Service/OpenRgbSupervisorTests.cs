@@ -233,7 +233,7 @@ public sealed class OpenRgbSupervisorTests
     {
         launcher = new FakeLauncher();
         var config = new OpenRgbConfig { Port = server.Port, DeviceSettleMilliseconds = 100, ResumeRescanDelayMilliseconds = 50 };
-        var lighting = new LightingController(StaticCyan, strip: null, stripLedCount: 0, Logger.None);
+        var lighting = new LightingController(StaticCyan, strip: null, new StripConfig(), Logger.None);
         lighting.Start();
         supervisor = new OpenRgbSupervisor(launcher, config, lighting, new StartupClock(), Logger.None, timings ?? FastTimings);
         return new RunningSupervisor(supervisor, lighting);

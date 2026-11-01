@@ -1,5 +1,6 @@
 using RGBcontroller.Core;
 using RGBcontroller.Core.Config;
+using RGBcontroller.Core.Lighting;
 using RGBcontroller.Core.Strip;
 using RGBcontroller.Ipc;
 using RGBcontroller.Service.Hardware;
@@ -15,9 +16,14 @@ namespace RGBcontroller.Service;
 /// Composition root shared by the Windows Service and console mode. Start order follows SPEC 3 / R5:
 /// the strip lights immediately, OpenRGB (detection takes about 6 s) comes second. Stop sends black everywhere.
 /// </summary>
-internal sealed class LightingHost : IControllableHost, IAsyncDisposable
+internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncDisposable
 {
     private const string SingletonMutexName = @"Global\RGBcontroller.LightingHost";
+
+    /// <summary>Strip changes (tray slider, hotkeys) come in bursts; the config is written once they stop.</summary>
+    private static readonly TimeSpan DeferredSaveDelay = TimeSpan.FromSeconds(2);
+
+    private static readonly AmbilightMode[] ModeCycle = [AmbilightMode.Screen, AmbilightMode.Radial, AmbilightMode.Solid, AmbilightMode.Off];
 
     private readonly ConfigStore _store;
     private readonly bool _canSaveConfig;
@@ -34,6 +40,13 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
     private SituationTracker? _situation;
     private OpenRgbLauncher? _launcher;
     private ControlServer? _control;
+    private FrameServer? _frames;
+    private Timer? _deferredSave;
+    private bool _savePending;
+    private bool _allOff;
+    private bool _screenLive;
+    private AmbilightMode? _modeBeforeSolid;
+    private long _stateSequence;
     private Task _supervisorTask = Task.CompletedTask;
     private bool _stripLit;
     private bool _suspended;
@@ -79,8 +92,8 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
 
         // The render loop gives the strip its first frame before the port is even open; OpenRGB devices join later.
         // The session is read first so that frame already shows the logon, lock or active profile.
-        _lighting = new LightingController(_config.Lighting, _strip, _config.Strip.LedCount, _log);
-        _situation = new SituationTracker(ConsoleSession.Query, _lighting.SetSituation, _log);
+        _lighting = new LightingController(_config.Lighting, _strip, _config.Strip, _log);
+        _situation = new SituationTracker(ConsoleSession.Query, OnSituationChanged, _log);
         _lighting.SetSituation(_situation.Current);
         _lighting.Start();
         _situation.Start();
@@ -93,10 +106,18 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
         var executable = Path.GetFullPath(Path.Combine(_installDirectory, _config.OpenRgb.ExecutablePath));
         _launcher = new OpenRgbLauncher(executable, _paths.OpenRgbConfigDirectory, _config.OpenRgb, _log);
         Supervisor = new OpenRgbSupervisor(_launcher, _config.OpenRgb, _lighting, _clock, _log);
+        Supervisor.StateChanged += _ => PublishState();
         _supervisorTask = Task.Run(() => Supervisor.RunAsync(_stop.Token));
 
-        _control = new ControlServer(IpcProtocol.ControlPipeName, new ServiceControlEndpoint(this), _log);
+        _deferredSave = new Timer(_ => SaveDeferred());
+        _control = new ControlServer(IpcProtocol.ControlPipeName, subscription => new ServiceControlEndpoint(this, subscription), _log);
+        StateChanged += _control.Broadcast;
         _control.Start();
+        if (_strip is not null)
+        {
+            _frames = new FrameServer(IpcProtocol.FramePipeName, _config.Strip.LedCount, this, _log);
+            _frames.Start();
+        }
     }
 
     /// <summary>Sends black to the strip and all OpenRGB devices, then stops OpenRGB. Bounded by <paramref name="timeout"/>.</summary>
@@ -119,6 +140,14 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
         {
             await _control.DisposeAsync().ConfigureAwait(false);
         }
+
+        if (_frames is not null)
+        {
+            await _frames.DisposeAsync().ConfigureAwait(false);
+        }
+
+        _deferredSave?.Dispose();
+        SaveDeferred();
 
         _log.Information("Lighting host stopped");
     }
@@ -146,6 +175,7 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
         _suspended = true;
         var sent = _lighting?.Suspend(TimeSpan.FromMilliseconds(800)) ?? true;
         _log.Information("Suspending: black sent to all devices{Timeout}", sent ? "" : " (timed out)");
+        PublishState();
     }
 
     /// <summary>
@@ -166,6 +196,7 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
         _situation?.Refresh("resume");
         _lighting?.Resume();
         Supervisor?.NotifyResumed();
+        PublishState();
     }
 
     /// <summary>SERVICE_CONTROL_SESSIONCHANGE; the tracker re-reads the console session.</summary>
@@ -184,6 +215,139 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
         var detail = $"strip {_strip?.PortName ?? "-"}, OpenRGB starts {Supervisor?.Starts ?? 0}";
         return new ServiceStatus(openRgb, strip, detail, CurrentConfig.Lighting.ActiveProfile);
     }
+
+    public AgentState GetAgentState()
+    {
+        var lighting = CurrentConfig.Lighting;
+        var ambilight = lighting.FindProfile(lighting.ActiveProfile)?.Ambilight ?? new AmbilightConfig();
+        var situation = _situation?.Current ?? LightingSituation.Default;
+        return new AgentState(
+            Interlocked.Increment(ref _stateSequence),
+            GetStatus(),
+            [.. lighting.Profiles.Select(p => p.Name)],
+            lighting.ActiveProfile,
+            SessionPolicy.ProfileFor(lighting, situation.Session),
+            ambilight.Mode,
+            ambilight.Mode == AmbilightMode.Solid ? ambilight.SolidBrightnessPercent : ambilight.BrightnessPercent,
+            _lighting?.IsScreenWanted ?? false,
+            _allOff);
+    }
+
+    public AgentSettings GetAgentSettings()
+    {
+        var config = CurrentConfig;
+        return new AgentSettings(config.Strip.LedCount, config.Strip.Layout, config.Capture, config.Hotkeys);
+    }
+
+    public string? ChangeStrip(StripChangeRequest request)
+    {
+        lock (_configLock)
+        {
+            var lighting = _config.Lighting;
+            var profile = lighting.FindProfile(lighting.ActiveProfile);
+            if (profile is null)
+            {
+                return $"The active profile '{lighting.ActiveProfile}' does not exist.";
+            }
+
+            var before = profile.Ambilight;
+            var mode = request.Mode ?? before.Mode;
+            if (request.ToggleSolid)
+            {
+                if (mode == AmbilightMode.Solid)
+                {
+                    mode = _modeBeforeSolid ?? AmbilightMode.Screen;
+                }
+                else
+                {
+                    _modeBeforeSolid = mode;
+                    mode = AmbilightMode.Solid;
+                }
+            }
+
+            if (request.CycleMode)
+            {
+                mode = ModeCycle[(Array.IndexOf(ModeCycle, mode) + 1) % ModeCycle.Length];
+            }
+
+            var solid = mode == AmbilightMode.Solid;
+            var brightness = solid ? before.SolidBrightnessPercent : before.BrightnessPercent;
+            brightness = Math.Clamp(request.BrightnessPercent ?? brightness + (request.BrightnessDelta ?? 0), 0, 100);
+            var after = before with
+            {
+                Mode = mode,
+                SolidBrightnessPercent = solid ? brightness : before.SolidBrightnessPercent,
+                BrightnessPercent = solid ? before.BrightnessPercent : brightness,
+            };
+            if (after == before)
+            {
+                return null;
+            }
+
+            var profiles = lighting.Profiles.Select(p => ReferenceEquals(p, profile) ? p with { Ambilight = after } : p).ToList();
+            Commit(_config with { Lighting = lighting with { Profiles = profiles } }, deferSave: true);
+            _log.Information("Strip of {Profile}: {Mode} at {Brightness}%", profile.Name, mode, brightness);
+            return null;
+        }
+    }
+
+    public void SetAllOff(bool off)
+    {
+        lock (_configLock)
+        {
+            if (_allOff == off)
+            {
+                return;
+            }
+
+            _allOff = off;
+            _lighting?.SetAllOff(off);
+        }
+
+        _log.Information("Everything {State} (tray or hotkey)", off ? "off" : "back on");
+        PublishState();
+    }
+
+    public string? StepProfile(int delta)
+    {
+        lock (_configLock)
+        {
+            var profiles = _config.Lighting.Profiles;
+            if (profiles.Count == 0)
+            {
+                return "There are no profiles.";
+            }
+
+            var current = profiles.ToList().FindIndex(p => string.Equals(p.Name, _config.Lighting.ActiveProfile, StringComparison.OrdinalIgnoreCase));
+            var next = ((current + delta) % profiles.Count + profiles.Count) % profiles.Count;
+            return SetActiveProfile(profiles[next].Name);
+        }
+    }
+
+    public void OnScreenColors(ReadOnlySpan<RgbColor> colors)
+    {
+        if (!_screenLive)
+        {
+            _screenLive = true;
+            _lighting?.SetScreenFeed(true);
+            _log.Information("Strip mirrors the screen (Agent capture)");
+        }
+
+        _lighting?.PushScreenFrame(colors);
+    }
+
+    public void OnScreenUnavailable()
+    {
+        if (_screenLive)
+        {
+            _screenLive = false;
+            _lighting?.SetScreenFeed(false);
+            _log.Information("Screen colors stopped; the strip shows its fallback");
+        }
+    }
+
+    /// <summary>Raised with the new state after anything the tray or the capture depends on changed.</summary>
+    public event Action<AgentState>? StateChanged;
 
     public ProfileList GetProfiles()
     {
@@ -233,16 +397,43 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
     }
 
     /// <summary>Applies <paramref name="config"/> to the running engine and saves it. Call under the config lock.</summary>
-    private void Commit(AppConfig config)
+    /// <param name="deferSave">Save after <see cref="DeferredSaveDelay"/> without further changes (slider drags, hotkey repeats).</param>
+    private void Commit(AppConfig config, bool deferSave = false)
     {
         _config = config;
         _lighting?.Apply(config.Lighting);
+        PublishState();
         if (!_canSaveConfig)
         {
             _log.Warning("Config file was rejected at start; the change is not saved");
             return;
         }
 
+        if (deferSave && _deferredSave is not null)
+        {
+            _savePending = true;
+            _deferredSave.Change(DeferredSaveDelay, Timeout.InfiniteTimeSpan);
+            return;
+        }
+
+        _savePending = false;
+        Save(config);
+    }
+
+    private void SaveDeferred()
+    {
+        lock (_configLock)
+        {
+            if (_savePending)
+            {
+                _savePending = false;
+                Save(_config);
+            }
+        }
+    }
+
+    private void Save(AppConfig config)
+    {
         try
         {
             _store.Save(config);
@@ -252,6 +443,14 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
             _log.Warning("Could not save the config: {Error}", ex.Message);
         }
     }
+
+    private void OnSituationChanged(LightingSituation situation)
+    {
+        _lighting?.SetSituation(situation);
+        PublishState();
+    }
+
+    private void PublishState() => StateChanged?.Invoke(GetAgentState());
 
     private AppConfig CurrentConfig
     {
@@ -266,6 +465,7 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
 
     private void OnStripStateChanged(StripState state, string? port)
     {
+        PublishState();
         if (state == StripState.Connected && !_stripLit)
         {
             _stripLit = true;
