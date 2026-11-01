@@ -62,7 +62,7 @@ public sealed class StripLayoutTests
     }
 
     [Fact]
-    public void GapsAndSurplusLedsStayDarkAndOffsetRotatesThePath()
+    public void GapsStayDarkAndOffsetRotatesThePath()
     {
         var config = new StripLayoutConfig { StartCorner = StripCorner.TopLeft, Top = 2, Right = 1, Bottom = 2, Left = 1, Offset = 1, Gaps = [0] };
         var layout = new StripLayout(config, 8);
@@ -71,8 +71,27 @@ public sealed class StripLayoutTests
         Assert.Equal(new StripLedPlacement(ScreenEdge.Top, 0.75f, 0.5f), layout.Leds[1]);
         Assert.Equal(new StripLedPlacement(ScreenEdge.Left, 0.5f, 1f), layout.Leds[5]);
         Assert.Equal(new StripLedPlacement(ScreenEdge.Top, 0.25f, 0.5f), layout.Leds[6]);
-        Assert.Null(layout.Leds[7]);
-        Assert.Equal([(1, 6)], layout.LitRuns());
+        // Past the end of the path the strip overlaps its start.
+        Assert.Equal(layout.Leds[1], layout.Leds[7]);
+        Assert.Equal([(1, 7)], layout.LitRuns());
+    }
+
+    [Fact]
+    public void OwnersStripStartsMidwayUpTheLeftEdgeAndOverlapsThreeLeds()
+    {
+        // 14 LEDs up the left edge, 41 top, 23 right, 43 bottom, 12 up the left edge again (3 beside the first ones).
+        var config = new StripLayoutConfig { StartCorner = StripCorner.BottomLeft, Left = 23, Top = 41, Right = 23, Bottom = 43, Offset = 9 };
+        var layout = new StripLayout(config, 133);
+
+        Assert.Equal(ScreenEdge.Left, layout.Leds[0]!.Value.Edge);
+        Assert.InRange(layout.Leds[0]!.Value.Along, 0.5f, 0.6f);
+        Assert.Equal(ScreenEdge.Left, layout.Leds[13]!.Value.Edge);
+        Assert.Equal(new StripLedPlacement(ScreenEdge.Top, 0.5f / 41, 1f / 41), layout.Leds[14]);
+        Assert.Equal(ScreenEdge.Right, layout.Leds[55]!.Value.Edge);
+        Assert.Equal(ScreenEdge.Bottom, layout.Leds[78]!.Value.Edge);
+        Assert.Equal(new StripLedPlacement(ScreenEdge.Left, 1 - 0.5f / 23, 1f / 23), layout.Leds[121]);
+        Assert.Equal(layout.Leds[0], layout.Leds[130]);
+        Assert.Equal(layout.Leds[2], layout.Leds[132]);
     }
 }
 

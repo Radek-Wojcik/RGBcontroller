@@ -43,7 +43,8 @@ public sealed class StripLayout
                 continue;
             }
 
-            if (k < path.Count)
+            // LEDs past the end of the path continue around the loop: an overlap where the strip end runs past its start.
+            if (path.Count > 0)
             {
                 leds[led] = path[(int)(((long)k + config.Offset) % path.Count + path.Count) % path.Count];
             }
