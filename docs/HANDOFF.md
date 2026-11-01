@@ -1,6 +1,6 @@
 # RGBcontroller: project state and handoff
 
-Last updated: 2026-11-01 evening, stage 3 built and installed, gate almost complete. **Read this file right after
+Last updated: 2026-11-01 evening, after the stage 3 gate. **Read this file right after
 `SPEC.md` and `CLAUDE.md` when you start a new session.** It records everything that was built, decided and learned
 in stages 0-3, the exact state of
 the owner's PC, and what to do next. `SPEC.md` stays the source of truth for requirements. This file is the source
@@ -15,12 +15,11 @@ of truth for **what exists now**.
 | 0. Foundation | **Passed** (2026-10-30) | `v0.0.1-stage0` | `docs/spikes/R2-R3-openrgb-sdk.md` |
 | 1. Service + OpenRGB supervisor + Adalight | **Passed** (2026-10-31) | `v0.1.0-stage1` | `docs/spikes/R1-R5-R6-stage1.md` |
 | 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
-| 3. Power, session, display | **Built, installed, owner says "everything works".** Gate counts incomplete: 3 of 10 sleeps, 0 of 3 hibernates in the logs. Not merged, not tagged. | (`v0.3.0-stage3` after the gate) | `docs/spikes/stage3-power.md` |
+| 3. Power, session, display | **Passed** (2026-11-01; owner waived the remaining 7 sleep and 3 hibernate cycles) | `v0.3.0-stage3` | `docs/spikes/stage3-power.md` |
 | 4-6 | Not started | | |
 
 What works today on the owner's PC:
-- The installed build is commit `b6a1d4f` on branch `stage-3-power` (version 0.2.0 in `--status`; bump to 0.3.0
-  when the stage is tagged).
+- The installed build is tag `v0.3.0-stage3` (`--status` reports 0.3.0).
 - The Windows Service `RGBcontroller` (LocalSystem, automatic start) lights the strip and all 5 OpenRGB devices
   before the logon screen.
 - Session and display policy (SPEC 4): Logon profile on the logon screen, active profile when unlocked, Lock
@@ -39,11 +38,10 @@ What works today on the owner's PC:
   the named pipe, without elevation.
 
 Repository: <https://github.com/Radek-Wojcik/RGBcontroller> (**private**, no LICENSE file: "All rights reserved").
-- `main` contains the merged `stage-1-service` and `stage-2-effects` branches (`--no-ff`) and is pushed, with tag
-  `v0.2.0-stage2`.
-- The branches `stage-1-service` and `stage-2-effects` are merged and can be deleted.
-- `stage-3-power` (8 commits on top of `main`) is **local only, not pushed**.
-- **The README was not refreshed for stage 2 or 3 yet**: do both together when stage 3 is closed (section 7).
+- `main` contains the merged `stage-1-service`, `stage-2-effects` and `stage-3-power` branches (`--no-ff`) and is
+  pushed, with tag `v0.3.0-stage3`.
+- The stage branches are merged and can be deleted.
+- **The README was not refreshed for stage 2 or 3 yet**: it is the first task of the next session (section 7).
 
 ---
 
@@ -356,17 +354,13 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 
 ## 7. Next steps
 
-1. **Finish the stage 3 gate** (owner said "everything works"; the logs do not yet cover the full SPEC counts):
-   - 7 more sleep/resume cycles (Start, Sleep, wait about 10 s, wake) and 3 hibernate cycles (`shutdown /h`, then
-     the power button). Read the logs yourself: count `Suspending:` / `Resume (` lines, check that every resume
-     ends with `Handed 5 OpenRGB devices` and that `Only N of M`, `Restarting OpenRGB` and stray kills never appear.
-   - Hibernate is available on this PC (`powercfg /a`); Hybrid Sleep is also listed.
-   - Already confirmed on the hardware and in the logs: lock, locked with the display off (strip, keyboard and mouse
-     fully dark after the repeat fix), display off while unlocked (strip only), logoff to the logon screen (Logon
-     profile), restart and cold boot (all devices including all 4 RAM sticks after the re-send fix), 3 sleeps.
-2. **Close stage 3** after the owner's explicit OK: bump `Version` in `Directory.Build.props` to 0.3.0, commit,
-   merge `stage-3-power` into `main` with `--no-ff`, tag `v0.3.0-stage3` (annotated), push `main` and the tag,
-   re-run `install-dev.ps1` so `--status` reports 0.3.0.
+1. **Watch for hibernate problems.** The owner closed the stage 3 gate without the remaining 7 sleep and 3
+   hibernate cycles (2026-11-01, "Close it without them"). Confirmed on the hardware and in the logs: lock,
+   locked with the display off, display off while unlocked, logoff to the logon screen, restart and cold boot
+   (all 4 RAM sticks after the re-send fix), 3 sleeps. Hibernate was never exercised; if the owner reports a
+   problem after hibernation, read the log around `Suspending:` / `Resume (` first.
+2. **Stage 3 is closed:** version 0.3.0, merged into `main` (`--no-ff`), tag `v0.3.0-stage3`, pushed, installed.
+   The branch `stage-3-power` can be deleted.
 3. **README refresh for stages 2 and 3** with the `anthropic-skills:publikowanie-projektow-github` skill:
    effects and profiles, `--status` / `--profile` / `--group`, sleep/resume, lock and display behaviour and
    `lighting.displayOff`, the CPU table. Show it, wait for "zatwierdzam", push `docs/readme-refresh`, open a PR
@@ -390,13 +384,14 @@ Polish; code, comments, commits and docs are in English.
 
 Read, in this order: SPEC.md, CLAUDE.md, docs/HANDOFF.md, then docs/spikes/*.md. HANDOFF.md describes exactly what
 exists, the owner's PC state, binding preferences (commits authored only by the owner with the noreply address, no
-Co-Authored-By/Claude attribution anywhere), decisions and open items. Stages 0-2 have passed (tags v0.0.1-stage0,
-v0.1.0-stage1, v0.2.0-stage2). Stage 3 (power, session, display) is built on the local branch stage-3-power and
-installed on this PC; its gate still needs 7 sleep and 3 hibernate cycles.
+Co-Authored-By/Claude attribution anywhere), decisions and open items. Stages 0-3 have passed (tags v0.0.1-stage0,
+v0.1.0-stage1, v0.2.0-stage2, v0.3.0-stage3); the Service with effects and the power/session/display policy is
+installed and running on this PC.
 
-First: switch to stage-3-power, run `.\build.ps1 -Test` (expect 165 green tests), check `git status`, and run
-`& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines and
-give the owner the remaining stage 3 gate steps from HANDOFF.md section 7. Close stage 3 only after the owner's OK.
+First: run `.\build.ps1 -Test` (expect 165 green tests), check `git status` and that main equals origin/main, and
+run `& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines,
+ask the open question from HANDOFF.md section 7 (O5) and propose the README refresh for stages 2-3. Start stage 4
+only when the owner says so.
 ```
 
 Useful commands:
