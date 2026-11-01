@@ -73,6 +73,13 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
         _loop.Wake();
     }
 
+    /// <summary>Strip identification pattern on or off.</summary>
+    public void SetStripTest(bool on)
+    {
+        _engine.SetStripTest(on);
+        _loop.Wake();
+    }
+
     /// <summary>The Agent started (true) or stopped (false) delivering screen colors.</summary>
     public void SetScreenFeed(bool live)
     {

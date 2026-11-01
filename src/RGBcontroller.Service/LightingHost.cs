@@ -42,6 +42,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     private ControlServer? _control;
     private FrameServer? _frames;
     private Timer? _deferredSave;
+    private Timer? _stripTestEnd;
     private bool _savePending;
     private bool _allOff;
     private bool _screenLive;
@@ -110,6 +111,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         _supervisorTask = Task.Run(() => Supervisor.RunAsync(_stop.Token));
 
         _deferredSave = new Timer(_ => SaveDeferred());
+        _stripTestEnd = new Timer(_ => ShowStripTest(TimeSpan.Zero));
         _control = new ControlServer(IpcProtocol.ControlPipeName, subscription => new ServiceControlEndpoint(this, subscription), _log);
         StateChanged += _control.Broadcast;
         _control.Start();
@@ -147,6 +149,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         }
 
         _deferredSave?.Dispose();
+        _stripTestEnd?.Dispose();
         SaveDeferred();
 
         _log.Information("Lighting host stopped");
@@ -322,6 +325,14 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
             var next = ((current + delta) % profiles.Count + profiles.Count) % profiles.Count;
             return SetActiveProfile(profiles[next].Name);
         }
+    }
+
+    public void ShowStripTest(TimeSpan duration)
+    {
+        var on = duration > TimeSpan.Zero;
+        _lighting?.SetStripTest(on);
+        _stripTestEnd?.Change(on ? duration : Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _log.Information(on ? "Strip test pattern for {Seconds} s" : "Strip test pattern ended", duration.TotalSeconds);
     }
 
     public void OnScreenColors(ReadOnlySpan<RgbColor> colors)

@@ -26,6 +26,8 @@ internal interface IControllableHost
 
     /// <returns>Null on success, otherwise a message for the client.</returns>
     string? StepProfile(int delta);
+
+    void ShowStripTest(TimeSpan duration);
 }
 
 /// <summary>The control connection a request arrived on; subscribing makes the server push state changes to it.</summary>
@@ -117,6 +119,17 @@ internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubsc
     public Task<CommandResult> SetAllOffAsync(bool off, CancellationToken cancellationToken)
     {
         host.SetAllOff(off);
+        return Task.FromResult(new CommandResult(true, null));
+    }
+
+    public Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken)
+    {
+        if (seconds is < 0 or > 600)
+        {
+            return Task.FromResult(new CommandResult(false, "The strip test lasts 0-600 seconds."));
+        }
+
+        host.ShowStripTest(TimeSpan.FromSeconds(seconds));
         return Task.FromResult(new CommandResult(true, null));
     }
 

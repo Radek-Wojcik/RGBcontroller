@@ -152,5 +152,7 @@ public sealed class IpcContractTests
         public Task<CommandResult> SetAllOffAsync(bool off, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(off, null));
 
         public Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
     }
 }

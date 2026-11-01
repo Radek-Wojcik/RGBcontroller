@@ -37,6 +37,12 @@ public interface IServiceControl
     /// <summary>Everything off (true) or back on; not saved, a Service restart turns everything on (since 1.3).</summary>
     Task<CommandResult> SetAllOffAsync(bool off, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Shows the strip identification pattern (first 3 LEDs green, last 3 red, every 10th white) for
+    /// <paramref name="seconds"/>, 0 ends it early; used to write strip.layout by hand (since 1.3).
+    /// </summary>
+    Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken);
+
     /// <summary>Moves the active profile by <paramref name="delta"/> places in config order, wrapping around (since 1.3).</summary>
     Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken);
 }
