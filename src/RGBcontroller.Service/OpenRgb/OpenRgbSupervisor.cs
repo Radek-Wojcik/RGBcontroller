@@ -14,6 +14,9 @@ public sealed record SupervisorTimings(TimeSpan HealthCheckInterval, TimeSpan St
 
     public TimeSpan BlackoutGrace { get; init; } = TimeSpan.FromMilliseconds(300);
 
+    /// <summary>Longest wait for the first DEVICE_LIST_UPDATED after a rescan request (normally about 1 s).</summary>
+    public TimeSpan RescanNoticeTimeout { get; init; } = TimeSpan.FromSeconds(15);
+
     /// <summary>Time since the system started (GetTickCount64).</summary>
     public Func<TimeSpan> Uptime { get; init; } = static () => TimeSpan.FromMilliseconds(Environment.TickCount64);
 
@@ -46,6 +49,7 @@ internal sealed class OpenRgbSupervisor
     private readonly SupervisorTimings _timings;
     private readonly ILogger _log;
     private readonly SemaphoreSlim _deviceListChanged = new(0, 1);
+    private readonly SemaphoreSlim _resumed = new(0, 1);
     private readonly HashSet<string> _litDevices = [];
     private int _starts;
 
@@ -67,6 +71,23 @@ internal sealed class OpenRgbSupervisor
 
     /// <summary>Raised after each successful (re)apply with the device count.</summary>
     public event Action<int>? DevicesApplied;
+
+    /// <summary>
+    /// The PC woke from sleep or hibernation. Devices come back in their power-on state (RAM rainbow, GPU dark) and
+    /// USB devices re-enumerate, so after a settle delay the single OpenRGB instance rescans and everything is re-applied,
+    /// modes included (SPEC 4). Never starts a second OpenRGB.
+    /// </summary>
+    public void NotifyResumed()
+    {
+        try
+        {
+            _resumed.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // Already pending.
+        }
+    }
 
     /// <summary>Runs until <paramref name="stopToken"/> is cancelled, then sends black to all devices and stops OpenRGB.</summary>
     public async Task RunAsync(CancellationToken stopToken)
@@ -157,11 +178,13 @@ internal sealed class OpenRgbSupervisor
             DevicesApplied?.Invoke(lighting.Devices.Count);
 
             Task? changed = null;
+            Task? resumed = null;
             while (true)
             {
                 changed ??= _deviceListChanged.WaitAsync(stopToken);
+                resumed ??= _resumed.WaitAsync(stopToken);
                 var health = Task.Delay(_timings.HealthCheckInterval, stopToken);
-                var first = await Task.WhenAny(process.Exited, disconnected.Task, changed, health).ConfigureAwait(false);
+                var first = await Task.WhenAny(process.Exited, disconnected.Task, changed, resumed, health).ConfigureAwait(false);
                 stopToken.ThrowIfCancellationRequested();
 
                 if (first == process.Exited)
@@ -186,6 +209,16 @@ internal sealed class OpenRgbSupervisor
                     _log.Information("Device list changed; re-applying lighting");
                     await lighting.ApplyAllAsync(stopToken).ConfigureAwait(false);
                     DevicesApplied?.Invoke(lighting.Devices.Count);
+                    continue;
+                }
+
+                if (first == resumed)
+                {
+                    resumed = null;
+                    await RescanAfterResumeAsync(client, lighting, changed, stopToken).ConfigureAwait(false);
+
+                    // The pending wait above took this rescan's first notice; it is handled now.
+                    changed = changed.IsCompleted ? null : changed;
                     continue;
                 }
 
@@ -260,6 +293,29 @@ internal sealed class OpenRgbSupervisor
         {
             _log.Warning("OpenRGB did not confirm the black frame: {Error}", ex.Message);
         }
+    }
+
+    /// <param name="firstNotice">The session loop's pending wait for DEVICE_LIST_UPDATED; it receives the first notice.</param>
+    private async Task RescanAfterResumeAsync(OpenRgbSdkClient client, DeviceLighting lighting, Task firstNotice, CancellationToken stopToken)
+    {
+        _sink.Detach();
+        var settle = TimeSpan.FromMilliseconds(_config.ResumeRescanDelayMilliseconds);
+        _log.Information("Resumed from sleep; rescanning devices in {Delay} ms", (long)settle.TotalMilliseconds);
+        await Task.Delay(settle, stopToken).ConfigureAwait(false);
+        client.RequestRescan();
+
+        // A rescan announces itself with several DEVICE_LIST_UPDATED notices; re-apply once they stop.
+        var timeout = Task.Delay(_timings.RescanNoticeTimeout, stopToken);
+        if (await Task.WhenAny(firstNotice, timeout).ConfigureAwait(false) != firstNotice)
+        {
+            stopToken.ThrowIfCancellationRequested();
+            _log.Warning("OpenRGB sent no device list update within {Seconds} s of the rescan; re-applying anyway",
+                _timings.RescanNoticeTimeout.TotalSeconds);
+        }
+
+        await WaitForQuietDeviceListAsync(stopToken).ConfigureAwait(false);
+        await lighting.ApplyAllAsync(stopToken).ConfigureAwait(false);
+        DevicesApplied?.Invoke(lighting.Devices.Count);
     }
 
     /// <summary>Debounce: wait until no DEVICE_LIST_UPDATED arrived for the settle period (a rescan sends several).</summary>

@@ -34,6 +34,8 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
     private ControlServer? _control;
     private Task _supervisorTask = Task.CompletedTask;
     private bool _stripLit;
+    private bool _suspended;
+    private long _lastResumeTicks = long.MinValue / 2;
 
     /// <param name="canSaveConfig">False when the file on disk was rejected and defaults run in memory; the file is then never overwritten.</param>
     public LightingHost(AppConfig config, ConfigStore store, bool canSaveConfig, AppPaths paths, string installDirectory, ILogger log)
@@ -129,6 +131,33 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
         _lighting?.Dispose();
         _stop.Dispose();
         _singleton?.Dispose();
+    }
+
+    /// <summary>Power event PBT_APMSUSPEND: black first, the time budget is small (SPEC 4).</summary>
+    public void OnSuspend()
+    {
+        _suspended = true;
+        var sent = _lighting?.Suspend(TimeSpan.FromMilliseconds(800)) ?? true;
+        _log.Information("Suspending: black sent to all devices{Timeout}", sent ? "" : " (timed out)");
+    }
+
+    /// <summary>
+    /// Power events PBT_APMRESUMEAUTOMATIC and PBT_APMRESUMESUSPEND (both arrive after one wake-up when a user is present):
+    /// handled once per suspend, or again only if the last resume is more than 10 s old.
+    /// </summary>
+    public void OnResume(string reason)
+    {
+        var now = Environment.TickCount64;
+        if (!_suspended && now - _lastResumeTicks < 10_000)
+        {
+            return;
+        }
+
+        _suspended = false;
+        _lastResumeTicks = now;
+        _log.Information("Resume ({Reason}): strip back now, OpenRGB devices after the rescan", reason);
+        _lighting?.Resume();
+        Supervisor?.NotifyResumed();
     }
 
     public ServiceStatus GetStatus()

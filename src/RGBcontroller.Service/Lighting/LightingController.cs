@@ -45,6 +45,21 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
         _loop.Wake();
     }
 
+    /// <summary>Sends black to everything and waits (bounded) until the frame is out; the PC is about to sleep.</summary>
+    public bool Suspend(TimeSpan timeout)
+    {
+        _engine.SetBlackout(true);
+        return _loop.RenderNow(timeout);
+    }
+
+    /// <summary>Back to the profile after resume. OpenRGB devices stay detached until the supervisor's rescan re-attaches them.</summary>
+    public void Resume()
+    {
+        Detach();
+        _engine.SetBlackout(false);
+        _loop.Wake();
+    }
+
     public void Attach(OpenRgbSdkClient client, IReadOnlyList<ControllerData> devices)
     {
         _output.Client = client;

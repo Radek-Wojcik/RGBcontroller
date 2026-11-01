@@ -29,6 +29,9 @@ public sealed class LightingEngine
 {
     private const int DefaultFps = 30;
 
+    /// <summary>Everything off, strip included; used while the PC sleeps.</summary>
+    private static readonly ProfileConfig BlackoutProfile = new() { Name = "(blackout)", Ambilight = new() { Mode = AmbilightMode.Off } };
+
     private readonly Lock _gate = new();
     private readonly ILogger _log;
     private readonly int _stripLedCount;
@@ -38,6 +41,7 @@ public sealed class LightingEngine
     private IReadOnlyList<ControllerData> _devices = [];
     private Target[] _targets = [];
     private bool _rebuild = true;
+    private bool _blackout;
 
     /// <param name="stripLedCount">0 when the strip is disabled.</param>
     public LightingEngine(LightingConfig config, int stripLedCount, int stripMaxFps, ILogger log)
@@ -67,6 +71,19 @@ public sealed class LightingEngine
         lock (_gate)
         {
             _config = config;
+            _rebuild = true;
+        }
+    }
+
+    /// <summary>
+    /// True sends black to every LED once and then idles (suspend); false returns to the profile. Takes effect on the
+    /// next <see cref="Render"/>.
+    /// </summary>
+    public void SetBlackout(bool blackout)
+    {
+        lock (_gate)
+        {
+            _blackout = blackout;
             _rebuild = true;
         }
     }
@@ -178,8 +195,8 @@ public sealed class LightingEngine
     private Target[] Build(TimeSpan now)
     {
         var config = _config;
-        var profile = config.FindProfile(config.ActiveProfile) ?? new ProfileConfig { Name = "(none)" };
-        if (!string.Equals(profile.Name, config.ActiveProfile, StringComparison.OrdinalIgnoreCase))
+        var profile = _blackout ? BlackoutProfile : config.FindProfile(config.ActiveProfile) ?? new ProfileConfig { Name = "(none)" };
+        if (!_blackout && !string.Equals(profile.Name, config.ActiveProfile, StringComparison.OrdinalIgnoreCase))
         {
             _log.Warning("Profile {Profile} does not exist; everything stays off", config.ActiveProfile);
         }
