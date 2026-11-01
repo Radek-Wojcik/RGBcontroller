@@ -174,9 +174,10 @@ public sealed class StripWriter : IAsyncDisposable
         {
             while (!token.IsCancellationRequested)
             {
+                string? port = null;
                 try
                 {
-                    var port = _ports.FindPort();
+                    port = _ports.FindPort();
                     if (port is null)
                     {
                         SetState(StripState.Searching, null);
@@ -209,7 +210,8 @@ public sealed class StripWriter : IAsyncDisposable
                 }
                 catch (Exception ex) when (ex is IOException or TimeoutException or UnauthorizedAccessException or InvalidOperationException)
                 {
-                    _log.Warning("Strip port {Port} failed ({Error}); reconnecting", PortName, ex.Message);
+                    // The local name, not PortName: an Open failure happens before the state names the port.
+                    _log.Warning("Strip port {Port:l} failed ({Error}); reconnecting", port, ex.Message);
                     transport?.Dispose();
                     transport = null;
                     SetState(StripState.Searching, null);

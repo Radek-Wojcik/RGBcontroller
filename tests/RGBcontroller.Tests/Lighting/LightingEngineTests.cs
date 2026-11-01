@@ -14,22 +14,32 @@ public sealed class LightingEngineTests
     private static readonly ControllerData Mouse = ControllerDataWriter.Mouse();
 
     [Fact]
-    public void StaticProfile_RendersOnceThenIdles()
+    public void StaticProfile_RendersOnceRepeatsTwiceThenIdles()
     {
         var engine = Engine(Config("Solid White"));
         engine.SetDevices([Keyboard, Ram]);
         var output = new RecordingOutput();
 
         var next = engine.Render(TimeSpan.Zero, output);
-
-        Assert.Null(next);
         Assert.Equal(1, output.LedWrites[0]);
         Assert.Equal(1, output.LedWrites[1]);
         Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
         Assert.Equal([(0, "Direct"), (1, "Direct")], output.Modes);
 
+        // The repeats guard against a lost USB packet (the Razer keyboard is written row by row).
+        var now = TimeSpan.Zero;
+        while (next is not null)
+        {
+            now += next.Value;
+            next = engine.Render(now, output);
+        }
+
+        Assert.Equal(3, output.LedWrites[0]);
+        Assert.Equal(3, output.LedWrites[1]);
+        Assert.InRange(now, TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(600));
+
         engine.Render(TimeSpan.FromSeconds(5), output);
-        Assert.Equal(1, output.LedWrites[0]);
+        Assert.Equal(3, output.LedWrites[0]);
         Assert.Equal(2, output.Modes.Count);
     }
 
@@ -144,6 +154,22 @@ public sealed class LightingEngineTests
     }
 
     [Fact]
+    public void ResendAll_PushesModesAndFramesAgain()
+    {
+        var engine = Engine(Config("Solid White"));
+        engine.SetDevices([Keyboard, Ram]);
+        var output = new RecordingOutput();
+        engine.Render(TimeSpan.Zero, output);
+        var writes = output.LedWrites[1];
+
+        engine.ResendAll();
+        engine.Render(TimeSpan.FromSeconds(5), output);
+
+        Assert.Equal(4, output.Modes.Count);
+        Assert.Equal(writes + 1, output.LedWrites[1]);
+    }
+
+    [Fact]
     public void ClearDevices_StopsAllDeviceWrites()
     {
         var engine = Engine(Config(DefaultLighting.RainbowProfile));
@@ -187,7 +213,12 @@ public sealed class LightingEngineTests
         engine.Render(TimeSpan.Zero, output);
 
         engine.SetBlackout(true);
-        Assert.Null(engine.Render(TimeSpan.FromSeconds(1), output));
+        var now = TimeSpan.FromSeconds(1);
+        for (var next = engine.Render(now, output); next is not null; next = engine.Render(now, output))
+        {
+            now += next.Value;
+        }
+
         Assert.All(output.Leds[0], c => Assert.Equal(RgbColor.Black, c));
         Assert.All(output.Strip, c => Assert.Equal(RgbColor.Black, c));
         var writes = output.LedWrites[0];
@@ -197,6 +228,61 @@ public sealed class LightingEngineTests
         engine.SetBlackout(false);
         Assert.NotNull(engine.Render(TimeSpan.FromSeconds(3), output));
         Assert.Contains(output.Leds[0], c => c != RgbColor.Black);
+    }
+
+    [Fact]
+    public void Situation_SelectsTheLogonAndLockProfiles()
+    {
+        var config = Config(DefaultLighting.RainbowProfile) with { LogonProfile = "Solid White", LockProfile = "Night" };
+        var engine = Engine(config);
+        engine.SetDevices([Keyboard]);
+        var output = new RecordingOutput();
+
+        // Static Solid White waits only for its repeat (250 ms); animated Rainbow is due within a frame (30 FPS).
+        engine.SetSituation(new(SessionKind.LogonScreen, DisplayOn: true));
+        Assert.Equal(TimeSpan.FromMilliseconds(250), engine.Render(TimeSpan.Zero, output));
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
+
+        engine.SetSituation(new(SessionKind.Unlocked, DisplayOn: true));
+        Assert.InRange(engine.Render(TimeSpan.FromSeconds(1), output)!.Value, TimeSpan.Zero, TimeSpan.FromMilliseconds(40));
+    }
+
+    [Fact]
+    public void DisplayOffWhileLocked_TurnsOffTheSetAndKeepsTheRest()
+    {
+        var engine = Engine(Config("Solid White"), stripLeds: 113);
+        var gpu = Mouse with { Name = DefaultLighting.Gpu };
+        engine.SetDevices([Keyboard, gpu]);
+        var output = new RecordingOutput();
+        engine.Render(TimeSpan.Zero, output);
+        var modes = output.Modes.Count;
+
+        engine.SetSituation(new(SessionKind.Locked, DisplayOn: false));
+        engine.Render(TimeSpan.FromSeconds(1), output);
+
+        Assert.All(output.Leds[0], c => Assert.Equal(RgbColor.Black, c));
+        Assert.All(output.Strip, c => Assert.Equal(RgbColor.Black, c));
+        Assert.Contains(output.Leds[1], c => c != RgbColor.Black);
+        Assert.Equal(modes, output.Modes.Count); // still Direct, no mode change on the device
+
+        engine.SetSituation(new(SessionKind.Locked, DisplayOn: true));
+        engine.Render(TimeSpan.FromSeconds(2), output);
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
+        Assert.Contains(output.Strip, c => c != RgbColor.Black);
+    }
+
+    [Fact]
+    public void DisplayOffWhileUnlocked_TurnsOffOnlyTheStripByDefault()
+    {
+        var engine = Engine(Config("Solid White"), stripLeds: 113);
+        engine.SetDevices([Keyboard]);
+        var output = new RecordingOutput();
+
+        engine.SetSituation(new(SessionKind.Unlocked, DisplayOn: false));
+        engine.Render(TimeSpan.Zero, output);
+
+        Assert.All(output.Strip, c => Assert.Equal(RgbColor.Black, c));
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
     }
 
     [Fact]

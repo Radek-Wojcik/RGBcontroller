@@ -29,6 +29,15 @@ public sealed class LightingEngine
 {
     private const int DefaultFps = 30;
 
+    /// <summary>
+    /// A static frame is sent this many extra times. OpenRGB pushes some devices in several USB packets (the Razer
+    /// keyboard row by row) and a lost packet left the F-key row lit after "turn off"; animations heal on the next frame.
+    /// The strip writer has its own keep-alive.
+    /// </summary>
+    private const int StaticRepeats = 2;
+
+    private static readonly TimeSpan StaticRepeatInterval = TimeSpan.FromMilliseconds(250);
+
     /// <summary>Everything off, strip included; used while the PC sleeps.</summary>
     private static readonly ProfileConfig BlackoutProfile = new() { Name = "(blackout)", Ambilight = new() { Mode = AmbilightMode.Off } };
 
@@ -42,6 +51,7 @@ public sealed class LightingEngine
     private Target[] _targets = [];
     private bool _rebuild = true;
     private bool _blackout;
+    private LightingSituation _situation = LightingSituation.Default;
 
     /// <param name="stripLedCount">0 when the strip is disabled.</param>
     public LightingEngine(LightingConfig config, int stripLedCount, int stripMaxFps, ILogger log)
@@ -89,6 +99,22 @@ public sealed class LightingEngine
     }
 
     /// <summary>
+    /// Session and display state (SPEC 4): selects the logon, lock or active profile and the outputs forced off while
+    /// the display is off. Takes effect on the next <see cref="Render"/>.
+    /// </summary>
+    public void SetSituation(LightingSituation situation)
+    {
+        lock (_gate)
+        {
+            if (_situation != situation)
+            {
+                _situation = situation;
+                _rebuild = true;
+            }
+        }
+    }
+
+    /// <summary>
     /// Devices of a fresh enumeration; the list index is the SDK device index. Modes are re-sent because a rescan or
     /// restart may have reset the hardware.
     /// </summary>
@@ -100,6 +126,22 @@ public sealed class LightingEngine
             _devices = devices;
             _sentModes.Clear();
             _rebuild = true;
+        }
+    }
+
+    /// <summary>
+    /// Sends every device mode and frame again on the next <see cref="Render"/>, without a rebuild. A mode write over
+    /// SMBus can be lost at cold boot (one RAM stick stayed dark until its Direct mode was pushed again).
+    /// </summary>
+    public void ResendAll()
+    {
+        lock (_gate)
+        {
+            _sentModes.Clear();
+            foreach (var target in _targets)
+            {
+                target.Dirty = true;
+            }
         }
     }
 
@@ -136,7 +178,12 @@ public sealed class LightingEngine
 
                 if (target.Dirty || (target.Animated && now >= target.NextDue))
                 {
-                    RenderTarget(target, seconds, output);
+                    if (RenderTarget(target, seconds, output) && !target.Animated && target.DeviceIndex != Target.Strip)
+                    {
+                        target.PendingRepeats = StaticRepeats;
+                        target.NextDue = now + StaticRepeatInterval;
+                    }
+
                     if (target.Animated)
                     {
                         target.NextDue += target.Interval;
@@ -146,8 +193,14 @@ public sealed class LightingEngine
                         }
                     }
                 }
+                else if (target.PendingRepeats > 0 && now >= target.NextDue)
+                {
+                    output.SetDeviceLeds(target.DeviceIndex, target.Sent);
+                    target.PendingRepeats--;
+                    target.NextDue = now + StaticRepeatInterval;
+                }
 
-                if (target.Animated)
+                if (target.Animated || target.PendingRepeats > 0)
                 {
                     var wait = target.NextDue - now;
                     next = next is null || wait < next ? wait : next;
@@ -158,7 +211,8 @@ public sealed class LightingEngine
         }
     }
 
-    private static void RenderTarget(Target target, double seconds, ILightingOutput output)
+    /// <returns>True when the frame was sent (it differed from the last one or the target is new).</returns>
+    private static bool RenderTarget(Target target, double seconds, ILightingOutput output)
     {
         var buffer = target.Buffer.AsSpan();
         foreach (var binding in target.Bindings)
@@ -176,7 +230,7 @@ public sealed class LightingEngine
 
         if (!target.Dirty && buffer.SequenceEqual(target.Sent))
         {
-            return;
+            return false;
         }
 
         if (target.DeviceIndex == Target.Strip)
@@ -190,16 +244,20 @@ public sealed class LightingEngine
 
         buffer.CopyTo(target.Sent);
         target.Dirty = false;
+        return true;
     }
 
     private Target[] Build(TimeSpan now)
     {
         var config = _config;
-        var profile = _blackout ? BlackoutProfile : config.FindProfile(config.ActiveProfile) ?? new ProfileConfig { Name = "(none)" };
-        if (!_blackout && !string.Equals(profile.Name, config.ActiveProfile, StringComparison.OrdinalIgnoreCase))
+        var profileName = SessionPolicy.ProfileFor(config, _situation.Session);
+        var profile = _blackout ? BlackoutProfile : config.FindProfile(profileName) ?? new ProfileConfig { Name = "(none)" };
+        if (!_blackout && !string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase))
         {
-            _log.Warning("Profile {Profile} does not exist; everything stays off", config.ActiveProfile);
+            _log.Warning("Profile {Profile} does not exist; everything stays off", profileName);
         }
+
+        var off = SessionPolicy.TurnedOff(config, _situation);
 
         var effects = new Dictionary<string, Effect>(StringComparer.OrdinalIgnoreCase);
         foreach (var group in profile.Groups)
@@ -210,24 +268,26 @@ public sealed class LightingEngine
         var targets = new List<Target>(_devices.Count + 1);
         if (_stripLedCount > 0)
         {
-            targets.Add(BuildStrip(profile, config, now));
+            targets.Add(BuildStrip(profile, config, off.Strip, now));
         }
 
         for (var index = 0; index < _devices.Count; index++)
         {
-            targets.Add(BuildDevice(index, _devices[index], profile, config, effects, now));
+            var device = _devices[index];
+            targets.Add(BuildDevice(index, device, profile, config, effects, off.Contains(device.Name), now));
         }
 
-        _log.Information("Rendering profile {Profile}: {Targets}", profile.Name,
+        _log.Information("Rendering profile {Profile} ({Situation:l}): {Targets}", profile.Name,
+            _blackout ? "blackout" : _situation.ToString(),
             string.Join("; ", targets.Select(t => t.Describe())));
         return [.. targets];
     }
 
-    private Target BuildStrip(ProfileConfig profile, LightingConfig config, TimeSpan now)
+    private Target BuildStrip(ProfileConfig profile, LightingConfig config, bool turnedOff, TimeSpan now)
     {
         var ambilight = profile.Ambilight;
         // Screen mode needs the Agent's capture (stage 4); until a frame source exists the fallback is shown.
-        var mode = ambilight.Mode == AmbilightMode.Screen ? ambilight.Fallback : ambilight.Mode;
+        var mode = turnedOff ? AmbilightMode.Off : ambilight.Mode == AmbilightMode.Screen ? ambilight.Fallback : ambilight.Mode;
         Effect effect = mode switch
         {
             AmbilightMode.Radial => new RadialEffect(
@@ -244,7 +304,8 @@ public sealed class LightingEngine
     }
 
     private Target BuildDevice(
-        int index, ControllerData device, ProfileConfig profile, LightingConfig config, Dictionary<string, Effect> effects, TimeSpan now)
+        int index, ControllerData device, ProfileConfig profile, LightingConfig config, Dictionary<string, Effect> effects, bool turnedOff,
+        TimeSpan now)
     {
         var points = LedLayoutBuilder.Build(device, config.Layouts);
         var zones = new List<(int Start, int Count, GroupConfig? Group, GroupEffectConfig? Effect)>(device.Zones.Count);
@@ -253,7 +314,8 @@ public sealed class LightingEngine
         {
             var count = (int)Math.Min(zone.LedsCount, (uint)Math.Max(0, points.Length - start));
             var group = FindGroup(config, device.Name, zone.Name);
-            zones.Add((start, count, group, group is null ? null : profile.FindGroup(group.Name)));
+            // A turned-off device keeps its per-LED mode and shows black, even if its profile runs a hardware mode.
+            zones.Add((start, count, group, group is null || turnedOff ? null : profile.FindGroup(group.Name)));
             start += count;
         }
 
@@ -296,7 +358,7 @@ public sealed class LightingEngine
             _log.Warning("{Device} has no Direct/Custom/Static per-LED mode; colors may not show", device.Name);
         }
 
-        var label = $"{device.Name} {string.Join(", ", lit.Select(z => $"{z.Group?.Name ?? "-"}:{z.Effect?.Effect.ToString() ?? "Off"}").Distinct())}";
+        var label = turnedOff ? $"{device.Name} turned off" : $"{device.Name} {string.Join(", ", lit.Select(z => $"{z.Group?.Name ?? "-"}:{z.Effect?.Effect.ToString() ?? "Off"}").Distinct())}";
         return new Target(index, label, points, [.. bindings], fps > 0 ? fps : DefaultFps, now)
         {
             ModeIndex = modeIndex,
@@ -373,6 +435,9 @@ public sealed class LightingEngine
         public bool Dirty { get; set; } = true;
 
         public TimeSpan NextDue { get; set; }
+
+        /// <summary>Static targets: extra sends of <see cref="Sent"/> still due (see <see cref="StaticRepeats"/>).</summary>
+        public int PendingRepeats { get; set; }
 
         public string Describe() => Animated ? $"{Name} @{Math.Round(1 / Interval.TotalSeconds)} fps" : $"{Name} (static)";
     }

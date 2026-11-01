@@ -6,6 +6,7 @@ using RGBcontroller.Service.Hardware;
 using RGBcontroller.Service.Ipc;
 using RGBcontroller.Service.Lighting;
 using RGBcontroller.Service.OpenRgb;
+using RGBcontroller.Service.Power;
 using Serilog;
 
 namespace RGBcontroller.Service;
@@ -30,6 +31,7 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
     private Mutex? _singleton;
     private StripWriter? _strip;
     private LightingController? _lighting;
+    private SituationTracker? _situation;
     private OpenRgbLauncher? _launcher;
     private ControlServer? _control;
     private Task _supervisorTask = Task.CompletedTask;
@@ -76,8 +78,12 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
         }
 
         // The render loop gives the strip its first frame before the port is even open; OpenRGB devices join later.
+        // The session is read first so that frame already shows the logon, lock or active profile.
         _lighting = new LightingController(_config.Lighting, _strip, _config.Strip.LedCount, _log);
+        _situation = new SituationTracker(ConsoleSession.Query, _lighting.SetSituation, _log);
+        _lighting.SetSituation(_situation.Current);
         _lighting.Start();
+        _situation.Start();
         if (_strip is not null)
         {
             _strip.Start();
@@ -97,6 +103,7 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
     public async Task StopAsync(TimeSpan timeout)
     {
         _log.Information("Lighting host stopping");
+        _situation?.Dispose();
 
         // No effect frame may follow the black frames below.
         _lighting?.Stop();
@@ -156,9 +163,13 @@ internal sealed class LightingHost : IControllableHost, IAsyncDisposable
         _suspended = false;
         _lastResumeTicks = now;
         _log.Information("Resume ({Reason}): strip back now, OpenRGB devices after the rescan", reason);
+        _situation?.Refresh("resume");
         _lighting?.Resume();
         Supervisor?.NotifyResumed();
     }
+
+    /// <summary>SERVICE_CONTROL_SESSIONCHANGE; the tracker re-reads the console session.</summary>
+    public void OnSessionChange(string reason, int sessionId) => _situation?.OnSessionChange(reason, sessionId);
 
     public ServiceStatus GetStatus()
     {

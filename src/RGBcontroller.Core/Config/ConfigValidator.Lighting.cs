@@ -101,6 +101,11 @@ public static partial class ConfigValidator
         {
             CheckProfileReference(errors, "lighting.lockProfile", lighting.LockProfile, profileNames);
         }
+
+        if (lighting.DisplayOff.Unlocked.Devices.Concat(lighting.DisplayOff.Locked.Devices).Any(string.IsNullOrWhiteSpace))
+        {
+            errors.Add("lighting.displayOff device names must not be empty.");
+        }
     }
 
     private static void ValidateEffect(
