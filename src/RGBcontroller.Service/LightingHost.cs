@@ -47,6 +47,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     private bool _allOff;
     private bool _screenLive;
     private AmbilightMode? _modeBeforeSolid;
+    private AmbilightMode? _modeBeforeOff;
     private long _stateSequence;
     private Task _supervisorTask = Task.CompletedTask;
     private bool _stripLit;
@@ -254,24 +255,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
             }
 
             var before = profile.Ambilight;
-            var mode = request.Mode ?? before.Mode;
-            if (request.ToggleSolid)
-            {
-                if (mode == AmbilightMode.Solid)
-                {
-                    mode = _modeBeforeSolid ?? AmbilightMode.Screen;
-                }
-                else
-                {
-                    _modeBeforeSolid = mode;
-                    mode = AmbilightMode.Solid;
-                }
-            }
-
-            if (request.CycleMode)
-            {
-                mode = ModeCycle[(Array.IndexOf(ModeCycle, mode) + 1) % ModeCycle.Length];
-            }
+            var mode = NextStripMode(before.Mode, request, ref _modeBeforeSolid, ref _modeBeforeOff);
 
             var solid = mode == AmbilightMode.Solid;
             var brightness = solid ? before.SolidBrightnessPercent : before.BrightnessPercent;
@@ -292,6 +276,47 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
             _log.Information("Strip of {Profile}: {Mode} at {Brightness}%", profile.Name, mode, brightness);
             return null;
         }
+    }
+
+    /// <summary>
+    /// The strip mode after <paramref name="request"/>. Solid toggles back to the mode before it. Raising the
+    /// brightness of a strip that is Off (hotkey or tray slider) turns it back on in the mode it had before, because a
+    /// brightness change on a dark strip looks like the Agent stopped responding (stage 4 gate).
+    /// </summary>
+    internal static AmbilightMode NextStripMode(
+        AmbilightMode current, StripChangeRequest request, ref AmbilightMode? modeBeforeSolid, ref AmbilightMode? modeBeforeOff)
+    {
+        var mode = request.Mode ?? current;
+        if (request.ToggleSolid)
+        {
+            if (mode == AmbilightMode.Solid)
+            {
+                mode = modeBeforeSolid ?? AmbilightMode.Screen;
+            }
+            else
+            {
+                modeBeforeSolid = mode;
+                mode = AmbilightMode.Solid;
+            }
+        }
+
+        if (request.CycleMode)
+        {
+            mode = ModeCycle[(Array.IndexOf(ModeCycle, mode) + 1) % ModeCycle.Length];
+        }
+
+        var brighter = request.BrightnessPercent > 0 || request.BrightnessDelta > 0;
+        if (mode == AmbilightMode.Off && current == AmbilightMode.Off && request is { Mode: null, ToggleSolid: false, CycleMode: false } && brighter)
+        {
+            mode = modeBeforeOff ?? AmbilightMode.Screen;
+        }
+
+        if (mode == AmbilightMode.Off && current != AmbilightMode.Off)
+        {
+            modeBeforeOff = current;
+        }
+
+        return mode;
     }
 
     public void SetAllOff(bool off)
