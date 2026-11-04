@@ -20,6 +20,12 @@ public sealed record SupervisorTimings(TimeSpan HealthCheckInterval, TimeSpan St
     /// <summary>Longest wait after a resume rescan for all devices known before the sleep to come back.</summary>
     public TimeSpan RescanCompleteTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// After a USB device appears, the rescan waits until no other device appeared for this long: a monitor's USB hub
+    /// powering on brings several devices within a few seconds, and a keyboard needs a moment before it answers.
+    /// </summary>
+    public TimeSpan HotPlugSettle { get; init; } = TimeSpan.FromSeconds(3);
+
     /// <summary>Time since the system started (GetTickCount64).</summary>
     public Func<TimeSpan> Uptime { get; init; } = static () => TimeSpan.FromMilliseconds(Environment.TickCount64);
 
@@ -53,6 +59,7 @@ internal sealed class OpenRgbSupervisor
     private readonly ILogger _log;
     private readonly SemaphoreSlim _deviceListChanged = new(0, 1);
     private readonly SemaphoreSlim _resumed = new(0, 1);
+    private readonly SemaphoreSlim _usbArrived = new(0, 1);
     private readonly HashSet<string> _litDevices = [];
     private int _starts;
 
@@ -101,6 +108,24 @@ internal sealed class OpenRgbSupervisor
         try
         {
             _resumed.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // Already pending.
+        }
+    }
+
+    /// <summary>
+    /// A USB device appeared (SPEC 4 hot-plug). OpenRGB does not notice new devices by itself, and a device that lost
+    /// power (the owner's keyboard and mouse hang on the monitor's USB hub) comes back in its factory lighting, so
+    /// once arrivals stop for <see cref="SupervisorTimings.HotPlugSettle"/> the single OpenRGB rescans and everything is
+    /// re-applied, modes included.
+    /// </summary>
+    public void NotifyUsbDeviceArrived()
+    {
+        try
+        {
+            _usbArrived.Release();
         }
         catch (SemaphoreFullException)
         {
@@ -198,12 +223,14 @@ internal sealed class OpenRgbSupervisor
 
             Task? changed = null;
             Task? resumed = null;
+            Task? arrived = null;
             while (true)
             {
                 changed ??= _deviceListChanged.WaitAsync(stopToken);
                 resumed ??= _resumed.WaitAsync(stopToken);
+                arrived ??= _usbArrived.WaitAsync(stopToken);
                 var health = Task.Delay(_timings.HealthCheckInterval, stopToken);
-                var first = await Task.WhenAny(process.Exited, disconnected.Task, changed, resumed, health).ConfigureAwait(false);
+                var first = await Task.WhenAny(process.Exited, disconnected.Task, changed, resumed, arrived, health).ConfigureAwait(false);
                 stopToken.ThrowIfCancellationRequested();
 
                 if (first == process.Exited)
@@ -231,10 +258,26 @@ internal sealed class OpenRgbSupervisor
                     continue;
                 }
 
+                if (first == arrived)
+                {
+                    arrived = null;
+                    while (await _usbArrived.WaitAsync(_timings.HotPlugSettle, stopToken).ConfigureAwait(false))
+                    {
+                        // More devices are still appearing (a hub powering on); wait until they stop.
+                    }
+
+                    _log.Information("USB devices appeared; rescanning devices");
+                    await RescanAsync(client, lighting, changed, TimeSpan.Zero, stopToken).ConfigureAwait(false);
+                    changed = changed.IsCompleted ? null : changed;
+                    continue;
+                }
+
                 if (first == resumed)
                 {
                     resumed = null;
-                    await RescanAfterResumeAsync(client, lighting, changed, stopToken).ConfigureAwait(false);
+                    var settle = TimeSpan.FromMilliseconds(_config.ResumeRescanDelayMilliseconds);
+                    _log.Information("Resumed from sleep; rescanning devices in {Delay} ms", (long)settle.TotalMilliseconds);
+                    await RescanAsync(client, lighting, changed, settle, stopToken).ConfigureAwait(false);
 
                     // The pending wait above took this rescan's first notice; it is handled now.
                     changed = changed.IsCompleted ? null : changed;
@@ -314,14 +357,13 @@ internal sealed class OpenRgbSupervisor
         }
     }
 
+    /// <summary>Rescan inside the running OpenRGB (after resume or hot-plug), then light every device again.</summary>
     /// <param name="firstNotice">The session loop's pending wait for DEVICE_LIST_UPDATED; it receives the first notice.</param>
-    private async Task RescanAfterResumeAsync(OpenRgbSdkClient client, DeviceLighting lighting, Task firstNotice, CancellationToken stopToken)
+    private async Task RescanAsync(OpenRgbSdkClient client, DeviceLighting lighting, Task firstNotice, TimeSpan delay, CancellationToken stopToken)
     {
         _sink.Detach();
         var expected = lighting.Devices.Count;
-        var settle = TimeSpan.FromMilliseconds(_config.ResumeRescanDelayMilliseconds);
-        _log.Information("Resumed from sleep; rescanning devices in {Delay} ms", (long)settle.TotalMilliseconds);
-        await Task.Delay(settle, stopToken).ConfigureAwait(false);
+        await Task.Delay(delay, stopToken).ConfigureAwait(false);
         client.RequestRescan();
 
         // A rescan announces itself with several DEVICE_LIST_UPDATED notices; re-apply once they stop.

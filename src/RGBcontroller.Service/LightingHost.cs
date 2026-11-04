@@ -39,6 +39,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     private StripWriter? _strip;
     private LightingController? _lighting;
     private SituationTracker? _situation;
+    private UsbArrivalMonitor? _usb;
     private OpenRgbLauncher? _launcher;
     private ControlServer? _control;
     private FrameServer? _frames;
@@ -113,6 +114,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         Supervisor = new OpenRgbSupervisor(_launcher, _config.OpenRgb, _lighting, _clock, _log);
         Supervisor.StateChanged += _ => PublishState();
         _supervisorTask = Task.Run(() => Supervisor.RunAsync(_stop.Token));
+        StartUsbMonitor(Supervisor);
 
         _deferredSave = new Timer(_ => SaveDeferred());
         _stripTestEnd = new Timer(_ => ShowStripTest(TimeSpan.Zero));
@@ -126,11 +128,40 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         }
     }
 
+    /// <summary>
+    /// USB arrivals start a rescan in OpenRGB (SPEC 4 hot-plug). The strip's own USB-serial chip is skipped: the strip
+    /// writer finds its port by itself and OpenRGB does not drive it.
+    /// </summary>
+    private void StartUsbMonitor(OpenRgbSupervisor supervisor)
+    {
+        var strip = $"VID_{_config.Strip.UsbVendorId}&PID_{_config.Strip.UsbProductId}";
+        _usb = new UsbArrivalMonitor(
+            link =>
+            {
+                if (!link.Contains(strip, StringComparison.OrdinalIgnoreCase))
+                {
+                    _log.Information("USB device arrived: {Device}", link);
+                    supervisor.NotifyUsbDeviceArrived();
+                }
+            },
+            ex => _log.Error(ex, "USB arrival handler failed"));
+        try
+        {
+            _usb.Start();
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            _log.Warning("USB hot-plug notifications unavailable: {Error}", ex.Message);
+            _usb = null;
+        }
+    }
+
     /// <summary>Sends black to the strip and all OpenRGB devices, then stops OpenRGB. Bounded by <paramref name="timeout"/>.</summary>
     public async Task StopAsync(TimeSpan timeout)
     {
         _log.Information("Lighting host stopping");
         _situation?.Dispose();
+        _usb?.Dispose();
 
         // No effect frame may follow the black frames below.
         _lighting?.Stop();
