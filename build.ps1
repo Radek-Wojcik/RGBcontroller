@@ -4,7 +4,8 @@
 
 .DESCRIPTION
     Uses a .NET 10 SDK from PATH, or the user-local SDK in %LOCALAPPDATA%\Microsoft\dotnet
-    (installed with the official dotnet-install.ps1, no admin rights needed).
+    (installed with the official dotnet-install.ps1, no admin rights needed). Builds the web front end first
+    (tools\Build-Frontend.ps1, needs Node.js) unless -SkipFrontend; -Test also runs its tests.
 
 .EXAMPLE
     .\build.ps1
@@ -14,7 +15,8 @@
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
-    [switch]$Test
+    [switch]$Test,
+    [switch]$SkipFrontend
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +38,10 @@ function Find-Dotnet {
 $dotnet = Find-Dotnet
 $solution = Join-Path $PSScriptRoot 'RGBcontroller.sln'
 Write-Host "Using $dotnet"
+
+if (-not $SkipFrontend) {
+    & (Join-Path $PSScriptRoot 'tools\Build-Frontend.ps1') -Test:$Test
+}
 
 & $dotnet build $solution -c $Configuration
 if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE)." }

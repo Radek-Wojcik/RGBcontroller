@@ -46,6 +46,7 @@ if (Get-Process AmbiBox -ErrorAction SilentlyContinue) {
 }
 
 # --- 1. publish ----------------------------------------------------------------------------
+& (Join-Path $root 'tools\Build-Frontend.ps1')
 $dotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'
 if (-not (Test-Path $dotnet)) { $dotnet = 'dotnet' }
 $publishDir = Join-Path $root 'artifacts\publish\app'
