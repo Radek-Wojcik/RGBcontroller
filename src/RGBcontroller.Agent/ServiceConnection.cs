@@ -28,6 +28,7 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
     private Task _loop = Task.CompletedTask;
     private volatile IServiceControl? _service;
     private long _lastSequence;
+    private long _settingsRevision;
     private NamedPipeClientStream? _frames;
     private byte[] _frameBuffer = [];
     private uint _frameSequence;
@@ -126,10 +127,11 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
                     throw new IOException("Incompatible Service.");
                 }
 
-                var settings = await service.GetAgentSettingsAsync(_stop.Token).ConfigureAwait(false);
-                _ui.Post(_ => SettingsChanged?.Invoke(settings), null);
                 Interlocked.Exchange(ref _lastSequence, 0);
                 var state = await service.SubscribeAsync(_stop.Token).ConfigureAwait(false);
+                Interlocked.Exchange(ref _settingsRevision, state.SettingsRevision);
+                var settings = await service.GetAgentSettingsAsync(_stop.Token).ConfigureAwait(false);
+                _ui.Post(_ => SettingsChanged?.Invoke(settings), null);
                 _service = service;
                 Publish(state);
                 _log.Information("Connected to RGBcontroller.Service {Version} (IPC {Protocol})", hello.AppVersion, hello.ProtocolVersion);
@@ -186,11 +188,40 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
             if (seen == last)
             {
                 _ui.Post(_ => StateChanged?.Invoke(state), null);
+                if (Interlocked.Exchange(ref _settingsRevision, state.SettingsRevision) != state.SettingsRevision)
+                {
+                    RefreshSettings();
+                }
+
                 return;
             }
 
             last = seen;
         }
+    }
+
+    /// <summary>Strip layout, capture or hotkeys changed in the Service (UI edit); fetch them again.</summary>
+    private void RefreshSettings()
+    {
+        var service = _service;
+        if (service is null)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var settings = await service.GetAgentSettingsAsync(_stop.Token).ConfigureAwait(false);
+                _ui.Post(_ => SettingsChanged?.Invoke(settings), null);
+                _log.Information("Settings changed in the Service; reloaded");
+            }
+            catch (Exception ex) when (ex is RemoteRpcException or ConnectionLostException or ObjectDisposedException or IOException or OperationCanceledException)
+            {
+                _log.Warning("Could not reload the settings: {Error}", ex.Message);
+            }
+        });
     }
 
     /// <summary>Writes one frame on the capture thread; reconnects the frame pipe at most once a second.</summary>
