@@ -212,7 +212,8 @@ internal sealed class DesktopDuplicator : IDisposable
     /// <summary>
     /// Maps the staging texture once the GPU has finished the copy. A plain Map blocks by spinning inside the driver
     /// (spike R7: about 2 ms of CPU per frame on the owner's GPU, more than the whole pipeline), so the copy is flushed
-    /// and the map retried with DO_NOT_WAIT after short sleeps on a high-resolution timer.
+    /// and the map retried with DO_NOT_WAIT after short sleeps on a high-resolution timer. A GPU busy with a game can
+    /// take longer than the retries; then the blocking Map waits for it (WAS_STILL_DRAWING is not an error).
     /// </summary>
     private MappedSubresource MapWhenReady()
     {
@@ -225,9 +226,13 @@ internal sealed class DesktopDuplicator : IDisposable
                 return mapped;
             }
 
-            if (result != Vortice.DXGI.ResultCode.WasStillDrawing || attempt >= MaxMapAttempts)
+            if (result != Vortice.DXGI.ResultCode.WasStillDrawing)
             {
                 result.CheckError();
+            }
+
+            if (attempt >= MaxMapAttempts)
+            {
                 return _context.Map(_staging!, 0, MapMode.Read);
             }
 

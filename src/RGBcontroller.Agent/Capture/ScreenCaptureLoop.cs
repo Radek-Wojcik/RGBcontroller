@@ -229,6 +229,11 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
 
             _log.Information("Desktop duplication lost (secure desktop, mode change or fullscreen); re-creating");
         }
+        catch (SharpGenException ex) when (ex.ResultCode == Vortice.DXGI.ResultCode.WasStillDrawing)
+        {
+            // The GPU is busy (games): skip this frame, the duplication itself is fine.
+            return CaptureOutcome.NoChange;
+        }
         catch (SharpGenException ex)
         {
             _log.Warning("Desktop duplication failed ({Error}); re-creating", ex.Message);
