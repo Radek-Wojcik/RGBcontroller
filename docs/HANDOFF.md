@@ -1,6 +1,6 @@
 # RGBcontroller: project state and handoff
 
-Last updated: 2026-11-01 late evening, stage 4 in progress (code done and installed, gate tests not run yet). **Read this file right after
+Last updated: 2026-11-04, stage 4 gate partly run and its fixes installed; stage 5 started on branch `stage-5-ui`. **Read this file right after
 `SPEC.md` and `CLAUDE.md` when you start a new session.** It records everything that was built, decided and learned
 in stages 0-4, the exact state of
 the owner's PC, and what to do next. `SPEC.md` stays the source of truth for requirements. This file is the source
@@ -16,12 +16,14 @@ of truth for **what exists now**.
 | 1. Service + OpenRGB supervisor + Adalight | **Passed** (2026-10-31) | `v0.1.0-stage1` | `docs/spikes/R1-R5-R6-stage1.md` |
 | 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
 | 3. Power, session, display | **Passed** (2026-11-01; owner waived the remaining 7 sleep and 3 hibernate cycles) | `v0.3.0-stage3` | `docs/spikes/stage3-power.md` |
-| 4. Agent, tray, hotkeys, ambilight | **In progress**: built and installed on branch `stage-4-agent` (pushed, not merged); gate tests open | | `docs/spikes/stage4-agent.md` |
-| 5-6 | Not started | | |
+| 4. Agent, tray, hotkeys, ambilight | **Gate partly run** (2026-11-04): tests 1, 2, 5 passed, 6 (HDR) skipped by the owner, 3, 4, 7, 8, 9 to repeat on the fixed build | | `docs/spikes/stage4-agent.md` |
+| 5. UI | **Started** on `stage-5-ui` at the owner's request: IPC 1.4 and the WebView2 shell; the front end waits for Node.js | | `docs/spikes/stage5-ui-plan.md` |
+| 6 | Not started | | |
 
 What works today on the owner's PC:
-- The installed build is branch `stage-4-agent` at commit 26f4bbe (`--status` reports 0.3.0, IPC 1.3; the version is
-  bumped to 0.4.0 when the gate passes).
+- The installed build is branch `stage-4-agent` at commit 653e286 with the gate fixes (`--status` reports 0.3.0,
+  IPC 1.3; the version is bumped to 0.4.0 when the gate passes). The `stage-5-ui` build (IPC 1.4, UI) is **not
+  installed**: its UAC prompt on 2026-11-04 was cancelled.
 - **Stage 4:** the Agent runs in the tray (started at logon from HKCU Run), mirrors the screen to the strip (Screen
   mode) while the session is unlocked and the display is on, and has hotkeys Ctrl+F9 (solid toggle), Ctrl+F10 (cycle
   strip mode), Ctrl+F11/F12 (strip brightness -/+). The strip is now **133 LEDs on COM7** in the owner's layout
@@ -373,6 +375,21 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
     `...\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\...`, and the shell reads that copy first. Start the Agent
     through `explorer.exe` and delete that LocalCache `RGBcontroller` folder if Agent logs look stale.
 20. **Stage 4 CPU (60 s, mostly still desktop):** Agent 0.004%, Service 0.001%; OpenRGB 1.6% is the RAM at 10 FPS.
+21. **Stage 4 gate findings (2026-11-04):**
+    - The reported "hang" at 14:52 was not a deadlock. The owner pressed Ctrl+F9/F10 quickly and the strip ended in
+      **Off**; the brightness hotkeys and the tray slider then changed the brightness of a dark strip. Fixed:
+      raising the brightness of an Off strip turns it back on in its previous mode (`LightingHost.NextStripMode`).
+    - "Exit Agent" crashed with ObjectDisposedException: WinForms disposes the ApplicationContext and Program's
+      `using` disposed it again. Dispose is idempotent now.
+    - In games `Map` with DO_NOT_WAIT gave up after 100 retries and threw WAS_STILL_DRAWING, which re-created the
+      duplication about 1200 times in one evening. Now it falls back to the blocking map, and WAS_STILL_DRAWING is a
+      skipped frame.
+    - The owner found the strip lagging in action films: capture 20 -> 30 FPS, attack 80 -> 40 ms, release
+      300 -> 120 ms, plus an explicit 800 ms fade-in when Screen mode starts (the owner likes the soft start).
+    - Strip brightness defaults to 100% (owner wish); every profile in the owner's `config.json` was set to 100%.
+22. **The Service writes every key into `config.json`**, so a changed code default never reaches an existing
+    install. Change the owner's file too (elevated edit with the Service stopped, backup next to it), or add a
+    migration. Backup made on 2026-11-04: `config.before-stage4-fixes.json`.
 
 
 ---
@@ -395,11 +412,20 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 | O8 | The ProgramData `config.json` was written before some keys existed (`minimumUptimeSeconds`); missing keys take the code defaults. Note this when keys are renamed (migration). | Ongoing |
 | O9 | UI and the installer: SPEC stages 5-6. | Stages 5-6 |
 | O14 | **Owner wish for the stage 5 strip wizard:** a screen where the owner marks on a drawn monitor outline where the strip starts and ends, where it turns the corners, where there is an overlap, and how many LEDs each run has; universal for any layout. The config model (`StripLayoutConfig`) already covers start corner, direction, counts, offset, overlap (wrap) and gaps. | Stage 5 |
-| O15 | Stage 4 gate tests not run yet (see section 7). The owner said bugs will be fixed afterwards. | Stage 4 gate |
+| O15 | Stage 4 gate 2026-11-04: 1 black screen, 2 dark scenes, 5 game passed; 6 HDR skipped (owner does not use HDR now); 3 (smoothness, letterbox), 4 (CPU), 7 (hotkeys, tray), 8 (sleep), 9 (Win+L) to repeat on the fixed build. | Stage 4 gate |
+| O16 | **Netflix and other DRM video show black** (SPEC 6.2 limitation: protected surfaces never reach Desktop Duplication). The owner wants colors there. No code workaround: the protection is in the OS and GPU. Owner-side option: a browser with hardware acceleration off (Chrome/Edge: Settings, System, "Use graphics acceleration when available"), at the cost of a lower Netflix resolution and more CPU for decoding; the Netflix Store app cannot be captured. | Owner |
+| O17 | Stage 5 needs Node.js for the React front end; ask the owner before downloading a portable Node LTS into `%LOCALAPPDATA%`. | Stage 5 |
 
 ---
 
 ## 7. Next steps
+
+**Current (2026-11-04):**
+1. Ask the owner to repeat stage 4 tests 3, 4 (they say "mierz", then measure), 7, 8 and 9 on the installed build.
+2. With the owner's OK: install `stage-5-ui` (`install-dev.ps1`, UAC) and download a portable Node.js LTS (O17).
+3. Continue stage 5 with `docs/spikes/stage5-ui-plan.md` (front end, preview stream, identify API, wizards).
+
+The stage 4 gate list (still valid):
 
 1. **Run the stage 4 gate** with the owner (give the steps in Polish, read logs and measure yourself):
    1. black screen = strip off (YouTube "black screen" fullscreen);
