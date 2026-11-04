@@ -397,13 +397,13 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
     - The owner found the strip lagging in action films: capture 20 -> 30 FPS, attack 80 -> 40 ms, release
       300 -> 120 ms, plus an explicit 800 ms fade-in when Screen mode starts (the owner likes the soft start).
     - Strip brightness defaults to 100% (owner wish); every profile in the owner's `config.json` was set to 100%.
-23. **USB hot-plug (2026-11-04):** after the monitor hub powered on, the keyboard and mouse came back in factory
+22. **USB hot-plug (2026-11-04):** after the monitor hub powered on, the keyboard and mouse came back in factory
     colors because OpenRGB had rescanned (after resume) before they re-enumerated and nothing rescanned later.
     `Power/UsbArrivalMonitor` (`CM_Register_Notification`, GUID_DEVINTERFACE_USB_DEVICE, works in Session 0) feeds
     `OpenRgbSupervisor.NotifyUsbDeviceArrived`: 3 s after the last arrival the single OpenRGB rescans and everything is
     re-applied. The strip's CH340 is skipped. The owner's report of a "frozen" Agent at the same time was the strip
     being disconnected: the Agent's message loop ran the whole time.
-22. **The Service writes every key into `config.json`**, so a changed code default never reaches an existing
+23. **The Service writes every key into `config.json`**, so a changed code default never reaches an existing
     install. Change the owner's file too (elevated edit with the Service stopped, backup next to it), or add a
     migration. Backup made on 2026-11-04: `config.before-stage4-fixes.json`.
 
