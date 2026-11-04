@@ -233,6 +233,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         _log.Information("Resume ({Reason}): strip back now, OpenRGB devices after the rescan", reason);
         _situation?.Refresh("resume");
         _lighting?.Resume();
+        _strip?.Reopen("resume");
         Supervisor?.NotifyResumed();
         PublishState();
     }

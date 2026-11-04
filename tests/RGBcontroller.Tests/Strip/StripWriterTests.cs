@@ -36,6 +36,65 @@ public sealed class StripWriterTests
     }
 
     [Fact]
+    public async Task Reopen_OpensAFreshPortAndResendsTheColors()
+    {
+        // After resume the old handle kept "working" while the strip stayed frozen (2026-11-04).
+        var ports = new FakePorts { Present = "COM7" };
+        await using var writer = new StripWriter(Config, ports, Logger.None, FastTimings);
+        writer.SetAll(new RgbColor(9, 8, 7), 100);
+        writer.Start();
+        await WaitUntilAsync(() => writer.State == StripState.Connected);
+
+        writer.Reopen("resume");
+
+        await WaitUntilAsync(() => ports.Transports.Count == 2 && writer.State == StripState.Connected);
+        Assert.True(ports.Transports[0].Disposed);
+        Assert.Equal(new byte[] { 9, 8, 7 }, ports.Transports[1].Frames.Last()[6..9]);
+    }
+
+    [Fact]
+    public async Task HandshakesWhileFramesFlow_ReopenThePort()
+    {
+        var ports = new FakePorts { Present = "COM7" };
+        var timings = FastTimings with { WatchdogWindow = TimeSpan.FromMilliseconds(300) };
+        await using var writer = new StripWriter(Config, ports, Logger.None, timings);
+        writer.Start();
+        await WaitUntilAsync(() => writer.State == StripState.Connected);
+
+        // A steady animation with replies: the board is not taking the frames.
+        ports.Transports[0].Replies = "Ada\n"u8.ToArray();
+        using var animation = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var colors = Task.Run(async () =>
+        {
+            for (byte i = 0; !animation.IsCancellationRequested; i++)
+            {
+                writer.SetAll(new RgbColor(i, 0, 0), 100);
+                await Task.Delay(20, CancellationToken.None);
+            }
+        }, CancellationToken.None);
+
+        await WaitUntilAsync(() => ports.Transports.Count >= 2);
+        await animation.CancelAsync();
+        await colors;
+        Assert.True(ports.Transports[0].Disposed);
+    }
+
+    [Fact]
+    public async Task HandshakesBetweenKeepAlives_AreNormal()
+    {
+        // A static color is only re-sent every keep-alive; the idle firmware may say "Ada" in between.
+        var ports = new FakePorts { Present = "COM7" };
+        var timings = FastTimings with { WatchdogWindow = TimeSpan.FromMilliseconds(300), KeepAlive = TimeSpan.FromMilliseconds(500) };
+        await using var writer = new StripWriter(Config, ports, Logger.None, timings);
+        writer.Start();
+        await WaitUntilAsync(() => writer.State == StripState.Connected);
+
+        ports.Transports[0].Replies = "Ada\n"u8.ToArray();
+        await Task.Delay(1000, TestContext.Current.CancellationToken);
+        Assert.Single(ports.Transports);
+    }
+
+    [Fact]
     public async Task WaitsForDeviceThenConnects()
     {
         var ports = new FakePorts { Present = null };
@@ -167,6 +226,21 @@ public sealed class StripWriterTests
         }
 
         public void Flush() => Flushed = true;
+
+        /// <summary>Bytes the fake board sends back once per read call (e.g. its "Ada" handshake).</summary>
+        public volatile byte[]? Replies;
+
+        public int ReadAvailable(Span<byte> buffer)
+        {
+            var replies = Replies;
+            if (replies is null)
+            {
+                return 0;
+            }
+
+            replies.CopyTo(buffer);
+            return replies.Length;
+        }
 
         public void Dispose() => Disposed = true;
     }
