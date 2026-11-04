@@ -21,9 +21,8 @@ of truth for **what exists now**.
 | 6 | Not started | | |
 
 What works today on the owner's PC:
-- The installed build is branch `stage-4-agent` at commit 653e286 with the gate fixes (`--status` reports 0.3.0,
-  IPC 1.3; the version is bumped to 0.4.0 when the gate passes). The `stage-5-ui` build (IPC 1.4, UI) is **not
-  installed**: its UAC prompt on 2026-11-04 was cancelled.
+- The installed build is branch `stage-5-ui` at commit 8f23abe (`--status` reports 0.3.0, IPC 1.4): stage 4 fixes,
+  the UI with the React front end, and the USB hot-plug rescan. Versions are bumped when the gates pass.
 - **Stage 4:** the Agent runs in the tray (started at logon from HKCU Run), mirrors the screen to the strip (Screen
   mode) while the session is unlocked and the display is on, and has hotkeys Ctrl+F9 (solid toggle), Ctrl+F10 (cycle
   strip mode), Ctrl+F11/F12 (strip brightness -/+). The strip is now **133 LEDs on COM7** in the owner's layout
@@ -398,6 +397,12 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
     - The owner found the strip lagging in action films: capture 20 -> 30 FPS, attack 80 -> 40 ms, release
       300 -> 120 ms, plus an explicit 800 ms fade-in when Screen mode starts (the owner likes the soft start).
     - Strip brightness defaults to 100% (owner wish); every profile in the owner's `config.json` was set to 100%.
+23. **USB hot-plug (2026-11-04):** after the monitor hub powered on, the keyboard and mouse came back in factory
+    colors because OpenRGB had rescanned (after resume) before they re-enumerated and nothing rescanned later.
+    `Power/UsbArrivalMonitor` (`CM_Register_Notification`, GUID_DEVINTERFACE_USB_DEVICE, works in Session 0) feeds
+    `OpenRgbSupervisor.NotifyUsbDeviceArrived`: 3 s after the last arrival the single OpenRGB rescans and everything is
+    re-applied. The strip's CH340 is skipped. The owner's report of a "frozen" Agent at the same time was the strip
+    being disconnected: the Agent's message loop ran the whole time.
 22. **The Service writes every key into `config.json`**, so a changed code default never reaches an existing
     install. Change the owner's file too (elevated edit with the Service stopped, backup next to it), or add a
     migration. Backup made on 2026-11-04: `config.before-stage4-fixes.json`.
@@ -426,6 +431,7 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 | O15 | Stage 4 gate 2026-11-04: 1 black screen, 2 dark scenes, 5 game passed; 6 HDR skipped (owner does not use HDR now); 3 (smoothness, letterbox), 4 (CPU), 7 (hotkeys, tray), 8 (sleep), 9 (Win+L) to repeat on the fixed build. | Stage 4 gate |
 | O16 | **Netflix and other DRM video show black** (SPEC 6.2 limitation: protected surfaces never reach Desktop Duplication). The owner wants colors there. No code workaround: the protection is in the OS and GPU. Owner-side option: a browser with hardware acceleration off (Chrome/Edge: Settings, System, "Use graphics acceleration when available"), at the cost of a lower Netflix resolution and more CPU for decoding; the Netflix Store app cannot be captured. | Owner |
 | O17 | **Done**: Node.js installed (section 3). | Done |
+| O18 | **The strip's LED BOX, the keyboard and the mouse are plugged into the monitor's USB hub.** When the monitor is off (its button, or standby) the hub has no power: the CH340 disappears, so no black frame can reach the strip, and the LED BOX (own 5 V supply) keeps lighting on its own. 2026-11-04: the CH340 vanished at 15:39 and came back at 17:09 after wake; the owner saw the strip lit through the sleep while the keyboard and mouse were dark. No software fix. Recommended: plug the LED BOX USB into a USB port of the PC, or keep the monitor's USB powered in standby (OSD setting, if the AG326UD has one). Asked the owner what the strip showed (one color or a pattern) to tell firmware standalone mode from a held frame. | Owner (hardware) |
 
 ---
 
