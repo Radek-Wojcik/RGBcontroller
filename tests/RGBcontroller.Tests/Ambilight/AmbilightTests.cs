@@ -100,7 +100,7 @@ public sealed class AmbilightPipelineTests
     private static readonly ScreenCaptureConfig Linear = new()
     {
         Gamma = 1, BlackThreshold = 0, BlackKnee = 0, AttackMilliseconds = 0, ReleaseMilliseconds = 0, BlackReleaseMilliseconds = 0,
-        LetterboxDetection = false,
+        LetterboxDetection = false, FadeInMilliseconds = 0,
     };
 
     private static StripLayout FourLeds() =>
@@ -129,7 +129,7 @@ public sealed class AmbilightPipelineTests
     [Fact]
     public void BlackScreenTurnsTheStripCompletelyOffWithoutATail()
     {
-        var config = new ScreenCaptureConfig { LetterboxDetection = false };
+        var config = new ScreenCaptureConfig { FadeInMilliseconds = 0, LetterboxDetection = false };
         var pipeline = new AmbilightPipeline(FourLeds(), config, 50);
         pipeline.OnImage(new TestImage(64, 36).Fill((_, _) => new RgbColor(255, 255, 255)).View(), TimeSpan.Zero);
         for (var i = 0; i < 30; i++)
@@ -156,7 +156,7 @@ public sealed class AmbilightPipelineTests
     [Fact]
     public void NearBlackNoiseIsZeroAndDarkScenesStayDark()
     {
-        var pipeline = new AmbilightPipeline(FourLeds(), new ScreenCaptureConfig { AttackMilliseconds = 0, LetterboxDetection = false }, 50);
+        var pipeline = new AmbilightPipeline(FourLeds(), new ScreenCaptureConfig { FadeInMilliseconds = 0, AttackMilliseconds = 0, LetterboxDetection = false }, 50);
 
         pipeline.OnImage(new TestImage(64, 36).Fill((_, _) => new RgbColor(8, 9, 10)).View(), TimeSpan.Zero);
         pipeline.Step(TimeSpan.FromMilliseconds(33));
@@ -171,7 +171,7 @@ public sealed class AmbilightPipelineTests
     [Fact]
     public void ReleaseIsSlowerThanAttack()
     {
-        var config = new ScreenCaptureConfig { Gamma = 1, LetterboxDetection = false };
+        var config = new ScreenCaptureConfig { FadeInMilliseconds = 0, Gamma = 1, LetterboxDetection = false };
         var pipeline = new AmbilightPipeline(FourLeds(), config, 50);
 
         pipeline.OnImage(new TestImage(64, 36).Fill((_, _) => new RgbColor(200, 200, 200)).View(), TimeSpan.Zero);
@@ -186,8 +186,30 @@ public sealed class AmbilightPipelineTests
         pipeline.Step(TimeSpan.FromMilliseconds(80));
         var fallen = 200 - pipeline.Output[0].R;
 
-        Assert.InRange(risen, 120, 135);
-        Assert.InRange(fallen, 20, 26);
+        // 40 ms attack and 120 ms release: after 80 ms 86% of the rise and 49% of the fall.
+        Assert.InRange(risen, 168, 178);
+        Assert.InRange(fallen, 45, 53);
+    }
+
+    [Fact]
+    public void ANewPipelineFadesIn()
+    {
+        var config = new ScreenCaptureConfig { FadeInMilliseconds = 800, AttackMilliseconds = 0, Gamma = 1, LetterboxDetection = false };
+        var pipeline = new AmbilightPipeline(FourLeds(), config, 50);
+        pipeline.OnImage(new TestImage(64, 36).Fill((_, _) => new RgbColor(200, 200, 200)).View(), TimeSpan.Zero);
+
+        pipeline.Step(TimeSpan.FromMilliseconds(200));
+        Assert.InRange(pipeline.Output[0].R, 49, 51);
+        Assert.False(pipeline.IsSettled);
+
+        pipeline.Step(TimeSpan.FromMilliseconds(600));
+        Assert.Equal(200, pipeline.Output[0].R);
+        Assert.True(pipeline.IsSettled);
+
+        // Only the start fades: later changes follow the attack time constant.
+        pipeline.OnImage(new TestImage(64, 36).Fill((_, _) => new RgbColor(250, 250, 250)).View(), TimeSpan.FromSeconds(1));
+        pipeline.Step(TimeSpan.FromMilliseconds(33));
+        Assert.Equal(250, pipeline.Output[0].R);
     }
 }
 

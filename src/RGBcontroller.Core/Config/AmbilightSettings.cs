@@ -65,7 +65,7 @@ public sealed record ScreenCaptureConfig
     public string? Monitor { get; set; }
 
     /// <summary>Desktop frames processed per second at most.</summary>
-    public int CaptureFps { get; set; } = 20;
+    public int CaptureFps { get; set; } = 30;
 
     /// <summary>Smoothed frames sent to the strip per second at most (the Service also clamps to the serial link).</summary>
     public int OutputFps { get; set; } = 30;
@@ -95,13 +95,19 @@ public sealed record ScreenCaptureConfig
     public double Saturation { get; set; } = 1.0;
 
     /// <summary>Time constant towards a brighter color.</summary>
-    public int AttackMilliseconds { get; set; } = 80;
+    public int AttackMilliseconds { get; set; } = 40;
 
-    /// <summary>Time constant towards a darker color.</summary>
-    public int ReleaseMilliseconds { get; set; } = 300;
+    /// <summary>Time constant towards a darker color (stage 4 gate: 300 ms lagged behind fast cuts in films).</summary>
+    public int ReleaseMilliseconds { get; set; } = 120;
 
     /// <summary>Time constant towards black; short, so a fade to black leaves no trailing glow.</summary>
     public int BlackReleaseMilliseconds { get; set; } = 60;
+
+    /// <summary>
+    /// When the strip starts mirroring the screen it fades in over this time instead of jumping to full brightness;
+    /// 0 turns the fade off.
+    /// </summary>
+    public int FadeInMilliseconds { get; set; } = 800;
 
     /// <summary>Shift the sampled bands inside letterbox or pillarbox bars.</summary>
     public bool LetterboxDetection { get; set; } = true;
