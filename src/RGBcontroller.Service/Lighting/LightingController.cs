@@ -66,6 +66,14 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
     /// <inheritdoc cref="LightingEngine.IsScreenWanted"/>
     public bool IsScreenWanted => _engine.IsScreenWanted;
 
+    public IReadOnlyList<ControllerData> Devices => _engine.Devices;
+
+    public void SetStripLayout(StripLayout layout)
+    {
+        _engine.SetStripLayout(layout);
+        _loop.Wake();
+    }
+
     /// <summary>Everything off or back on (tray, hotkey).</summary>
     public void SetAllOff(bool off)
     {

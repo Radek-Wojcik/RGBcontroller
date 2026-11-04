@@ -46,8 +46,8 @@ public sealed class LightingEngine
     private readonly ILogger _log;
     private readonly int _stripLedCount;
     private readonly int _stripMaxFps;
-    private readonly LedPoint[] _stripPoints;
-    private readonly IReadOnlyList<(int Start, int Count)> _stripRuns;
+    private LedPoint[] _stripPoints;
+    private IReadOnlyList<(int Start, int Count)> _stripRuns;
     private readonly RgbColor[] _screen;
     private readonly Dictionary<int, int> _sentModes = [];
     private LightingConfig _config;
@@ -163,6 +163,38 @@ public sealed class LightingEngine
             {
                 return _config;
             }
+        }
+    }
+
+    /// <summary>OpenRGB devices of the last enumeration (empty while detached).</summary>
+    public IReadOnlyList<ControllerData> Devices
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _devices;
+            }
+        }
+    }
+
+    /// <summary>
+    /// New strip layout (layout wizard, config edit). A layout for a different LED count is ignored; the LED count
+    /// changes only with a Service restart. Takes effect on the next <see cref="Render"/>.
+    /// </summary>
+    public void SetStripLayout(StripLayout layout)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        if (layout.LedCount != _stripLedCount)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _stripPoints = layout.ToPoints();
+            _stripRuns = layout.LitRuns();
+            _rebuild = true;
         }
     }
 

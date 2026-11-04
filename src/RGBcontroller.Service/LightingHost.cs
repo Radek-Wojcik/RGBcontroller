@@ -1,5 +1,6 @@
 using RGBcontroller.Core;
 using RGBcontroller.Core.Config;
+using RGBcontroller.Core.Ambilight;
 using RGBcontroller.Core.Lighting;
 using RGBcontroller.Core.Strip;
 using RGBcontroller.Ipc;
@@ -49,6 +50,8 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     private AmbilightMode? _modeBeforeSolid;
     private AmbilightMode? _modeBeforeOff;
     private long _stateSequence;
+    private long _configRevision = 1;
+    private long _settingsRevision = 1;
     private Task _supervisorTask = Task.CompletedTask;
     private bool _stripLit;
     private bool _suspended;
@@ -206,6 +209,73 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     /// <summary>SERVICE_CONTROL_SESSIONCHANGE; the tracker re-reads the console session.</summary>
     public void OnSessionChange(string reason, int sessionId) => _situation?.OnSessionChange(reason, sessionId);
 
+    public ConfigSnapshot GetConfig()
+    {
+        lock (_configLock)
+        {
+            return new ConfigSnapshot(_configRevision, _config);
+        }
+    }
+
+    public ConfigUpdateResult UpdateConfig(long expectedRevision, AppConfig proposed)
+    {
+        lock (_configLock)
+        {
+            if (expectedRevision != _configRevision)
+            {
+                return new ConfigUpdateResult(false, "The configuration changed meanwhile; reload it and try again.", _configRevision, [], false);
+            }
+
+            var current = _config;
+            var config = ProtectConfig(current, proposed);
+            var errors = ConfigValidator.Validate(config);
+            if (errors.Count > 0)
+            {
+                return new ConfigUpdateResult(false, "The configuration is not valid.", _configRevision, errors, false);
+            }
+
+            var restart = NeedsRestart(current, config);
+            if (config.Strip.Layout != current.Strip.Layout)
+            {
+                _lighting?.SetStripLayout(new StripLayout(config.Strip.Layout, current.Strip.LedCount));
+            }
+
+            if (config != current)
+            {
+                Commit(config);
+                _log.Information("Configuration changed by a client (revision {Revision}){Restart}", _configRevision,
+                    restart ? "; some changes apply after a Service restart" : "");
+            }
+
+            return new ConfigUpdateResult(true, null, _configRevision, [], restart);
+        }
+    }
+
+    /// <summary>
+    /// What a client may not change over IPC: the schema version, and the OpenRGB executable the Service starts as
+    /// LocalSystem (SPEC 9: no process launch).
+    /// </summary>
+    internal static AppConfig ProtectConfig(AppConfig current, AppConfig proposed) =>
+        proposed with
+        {
+            SchemaVersion = current.SchemaVersion,
+            OpenRgb = proposed.OpenRgb with { ExecutablePath = current.OpenRgb.ExecutablePath },
+        };
+
+    /// <summary>Changes the running Service cannot apply: strip hardware (layout aside), OpenRGB and logging.</summary>
+    internal static bool NeedsRestart(AppConfig current, AppConfig next) =>
+        next.Strip with { Layout = current.Strip.Layout } != current.Strip
+        || next.OpenRgb != current.OpenRgb
+        || next.Logging != current.Logging;
+
+    public DeviceList GetDevices()
+    {
+        var devices = _lighting?.Devices ?? [];
+        var list = devices.Select((d, i) => new DeviceInfo(i, d.Name, d.Type,
+            [.. d.Zones.Select(z => new ZoneInfo(z.Name, z.Type, (int)z.LedsCount, z.LedsMin != z.LedsMax, (int)z.MatrixWidth, (int)z.MatrixHeight))])).ToList();
+        return new DeviceList(list, CurrentConfig.Strip.Enabled ? CurrentConfig.Strip.LedCount : 0);
+    }
+
     public ServiceStatus GetStatus()
     {
         var strip = _strip?.State switch
@@ -234,7 +304,9 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
             ambilight.Mode,
             ambilight.Mode == AmbilightMode.Solid ? ambilight.SolidBrightnessPercent : ambilight.BrightnessPercent,
             _lighting?.IsScreenWanted ?? false,
-            _allOff);
+            _allOff,
+            Interlocked.Read(ref _settingsRevision),
+            Interlocked.Read(ref _configRevision));
     }
 
     public AgentSettings GetAgentSettings()
@@ -436,7 +508,15 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     /// <param name="deferSave">Save after <see cref="DeferredSaveDelay"/> without further changes (slider drags, hotkey repeats).</param>
     private void Commit(AppConfig config, bool deferSave = false)
     {
+        var before = _config;
         _config = config;
+        Interlocked.Increment(ref _configRevision);
+        if (before.Strip.LedCount != config.Strip.LedCount || before.Strip.Layout != config.Strip.Layout
+            || before.Capture != config.Capture || before.Hotkeys != config.Hotkeys)
+        {
+            Interlocked.Increment(ref _settingsRevision);
+        }
+
         _lighting?.Apply(config.Lighting);
         PublishState();
         if (!_canSaveConfig)
