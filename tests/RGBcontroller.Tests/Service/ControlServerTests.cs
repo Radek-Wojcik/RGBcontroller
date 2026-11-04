@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using RGBcontroller.Core.Config;
 using RGBcontroller.Ipc;
+using RGBcontroller.Service;
 using RGBcontroller.Service.Ipc;
 using Serilog.Core;
 
@@ -121,6 +122,43 @@ public sealed class ControlServerTests
         Assert.Equal(new StripChangeRequest(BrightnessDelta: -10), host.LastStripChange);
     }
 
+    [Fact]
+    public async Task Endpoint_RejectsIncompleteConfigs()
+    {
+        var host = new FakeHost();
+        var endpoint = new ServiceControlEndpoint(host);
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.False((await endpoint.UpdateConfigAsync(null!, ct)).Success);
+        Assert.False((await endpoint.UpdateConfigAsync(new ConfigUpdateRequest(1, AppConfig.CreateDefault() with { Lighting = null! }), ct)).Success);
+        Assert.Null(host.Updated);
+        Assert.True((await endpoint.UpdateConfigAsync(new ConfigUpdateRequest(1, AppConfig.CreateDefault()), ct)).Success);
+    }
+
+    [Fact]
+    public void ConfigEdits_CannotChangeTheOpenRgbExecutable()
+    {
+        var current = AppConfig.CreateDefault();
+        var proposed = current with { SchemaVersion = 99, OpenRgb = current.OpenRgb with { ExecutablePath = @"C:\evil.exe", Port = 7000 } };
+
+        var kept = LightingHost.ProtectConfig(current, proposed);
+
+        Assert.Equal(current.OpenRgb.ExecutablePath, kept.OpenRgb.ExecutablePath);
+        Assert.Equal(current.SchemaVersion, kept.SchemaVersion);
+        Assert.Equal(7000, kept.OpenRgb.Port);
+    }
+
+    [Fact]
+    public void ConfigEdits_ReportWhatNeedsARestart()
+    {
+        var current = AppConfig.CreateDefault();
+
+        Assert.False(LightingHost.NeedsRestart(current, current with { Strip = current.Strip with { Layout = new StripLayoutConfig { Top = 41 } } }));
+        Assert.False(LightingHost.NeedsRestart(current, current with { Capture = new ScreenCaptureConfig { Gamma = 2.2 } }));
+        Assert.True(LightingHost.NeedsRestart(current, current with { Strip = current.Strip with { LedCount = 133 } }));
+        Assert.True(LightingHost.NeedsRestart(current, current with { OpenRgb = current.OpenRgb with { Port = 7000 } }));
+    }
+
     private sealed class EventSink : IServiceEvents
     {
         public TaskCompletionSource<AgentState> Next { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -150,6 +188,18 @@ public sealed class ControlServerTests
         public void SetAllOff(bool off) => AllOff = off;
 
         public string? StepProfile(int delta) => null;
+
+        public AppConfig? Updated { get; private set; }
+
+        public ConfigSnapshot GetConfig() => new(1, AppConfig.CreateDefault());
+
+        public ConfigUpdateResult UpdateConfig(long expectedRevision, AppConfig config)
+        {
+            Updated = config;
+            return new ConfigUpdateResult(true, null, expectedRevision + 1, [], false);
+        }
+
+        public DeviceList GetDevices() => new([], 113);
 
         public void ShowStripTest(TimeSpan duration)
         {

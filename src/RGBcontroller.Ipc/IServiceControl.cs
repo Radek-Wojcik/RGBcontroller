@@ -45,6 +45,20 @@ public interface IServiceControl
 
     /// <summary>Moves the active profile by <paramref name="delta"/> places in config order, wrapping around (since 1.3).</summary>
     Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken);
+
+    /// <summary>The whole configuration the Service runs on and its revision (since 1.4, for the UI).</summary>
+    Task<ConfigSnapshot> GetConfigAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Replaces the configuration if nobody changed it since <see cref="ConfigUpdateRequest.ExpectedRevision"/>,
+    /// validates, applies and saves it (since 1.4). Lighting, the strip layout, the capture pipeline and hotkeys apply
+    /// at once; other strip hardware, OpenRGB and logging settings after a Service restart. The OpenRGB executable path
+    /// cannot be changed over IPC (SPEC 9: no process launch).
+    /// </summary>
+    Task<ConfigUpdateResult> UpdateConfigAsync(ConfigUpdateRequest request, CancellationToken cancellationToken);
+
+    /// <summary>OpenRGB devices the Service drives right now, with their zones (since 1.4).</summary>
+    Task<DeviceList> GetDevicesAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Notifications the Service sends to subscribed clients (JSON-RPC notifications, no reply).</summary>
@@ -95,6 +109,10 @@ public sealed record GroupTuningRequest(
 /// <param name="StripMode">Ambilight mode of the active profile.</param>
 /// <param name="StripBrightnessPercent">Brightness of that mode (Solid: its power).</param>
 /// <param name="CaptureWanted">True while the strip should mirror the screen: Screen mode, unlocked, display on, nothing off.</param>
+/// <param name="SettingsRevision">
+/// Changes whenever <see cref="AgentSettings"/> change (since 1.4); the Agent then calls GetAgentSettingsAsync again.
+/// </param>
+/// <param name="ConfigRevision">Revision of the whole configuration (since 1.4); the UI reloads it when it changes.</param>
 public sealed record AgentState(
     long Sequence,
     ServiceStatus Status,
@@ -104,7 +122,9 @@ public sealed record AgentState(
     AmbilightMode StripMode,
     int StripBrightnessPercent,
     bool CaptureWanted,
-    bool AllOff);
+    bool AllOff,
+    long SettingsRevision = 0,
+    long ConfigRevision = 0);
 
 public sealed record AgentSettings(int LedCount, StripLayoutConfig Layout, ScreenCaptureConfig Capture, HotkeysConfig Hotkeys);
 
@@ -114,3 +134,23 @@ public sealed record AgentSettings(int LedCount, StripLayoutConfig Layout, Scree
 /// <param name="CycleMode">Screen, Radial, Solid, Off, Screen...</param>
 public sealed record StripChangeRequest(
     AmbilightMode? Mode = null, int? BrightnessPercent = null, int? BrightnessDelta = null, bool ToggleSolid = false, bool CycleMode = false);
+
+/// <param name="Revision">Increases with every change; pass it back in <see cref="ConfigUpdateRequest.ExpectedRevision"/>.</param>
+public sealed record ConfigSnapshot(long Revision, AppConfig Config);
+
+public sealed record ConfigUpdateRequest(long ExpectedRevision, AppConfig Config);
+
+/// <param name="Revision">The revision now in effect (the new one on success).</param>
+/// <param name="Errors">Validation errors; the configuration was not changed.</param>
+/// <param name="RestartRequired">Saved, but some changes take effect only after the Service restarts.</param>
+public sealed record ConfigUpdateResult(bool Success, string? Message, long Revision, IReadOnlyList<string> Errors, bool RestartRequired);
+
+public sealed record DeviceList(IReadOnlyList<DeviceInfo> Devices, int StripLedCount);
+
+/// <param name="Index">SDK device index.</param>
+/// <param name="Type">OpenRGB device type number (0 motherboard, 1 DRAM, 2 GPU, 5 keyboard, 6 mouse, ...).</param>
+public sealed record DeviceInfo(int Index, string Name, int Type, IReadOnlyList<ZoneInfo> Zones);
+
+/// <param name="Type">OpenRGB zone type: 0 single, 1 linear, 2 matrix.</param>
+/// <param name="Resizable">True for addressable headers whose LED count is set in openRgb.zoneSizes.</param>
+public sealed record ZoneInfo(string Name, int Type, int LedCount, bool Resizable, int MatrixWidth, int MatrixHeight);

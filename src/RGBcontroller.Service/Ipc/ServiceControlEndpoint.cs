@@ -1,3 +1,4 @@
+using RGBcontroller.Core.Config;
 using RGBcontroller.Ipc;
 
 namespace RGBcontroller.Service.Ipc;
@@ -28,6 +29,12 @@ internal interface IControllableHost
     string? StepProfile(int delta);
 
     void ShowStripTest(TimeSpan duration);
+
+    ConfigSnapshot GetConfig();
+
+    ConfigUpdateResult UpdateConfig(long expectedRevision, AppConfig config);
+
+    DeviceList GetDevices();
 }
 
 /// <summary>The control connection a request arrived on; subscribing makes the server push state changes to it.</summary>
@@ -132,6 +139,29 @@ internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubsc
         host.ShowStripTest(TimeSpan.FromSeconds(seconds));
         return Task.FromResult(new CommandResult(true, null));
     }
+
+    public Task<ConfigSnapshot> GetConfigAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetConfig());
+
+    public Task<ConfigUpdateResult> UpdateConfigAsync(ConfigUpdateRequest request, CancellationToken cancellationToken)
+    {
+        // A JSON payload can leave any member null despite the non-nullable types; the validator expects whole objects.
+        if (request?.Config is not { } config || config.Strip?.Layout is null || config.OpenRgb is null || config.Lighting is null
+            || config.Capture is null || config.Hotkeys is null || config.Logging is null)
+        {
+            return Task.FromResult(new ConfigUpdateResult(false, "The configuration is incomplete.", 0, [], false));
+        }
+
+        try
+        {
+            return Task.FromResult(host.UpdateConfig(request.ExpectedRevision, config));
+        }
+        catch (NullReferenceException)
+        {
+            return Task.FromResult(new ConfigUpdateResult(false, "The configuration is incomplete.", 0, [], false));
+        }
+    }
+
+    public Task<DeviceList> GetDevicesAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetDevices());
 
     public Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken)
     {
