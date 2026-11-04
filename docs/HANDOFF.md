@@ -17,7 +17,7 @@ of truth for **what exists now**.
 | 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
 | 3. Power, session, display | **Passed** (2026-11-01; owner waived the remaining 7 sleep and 3 hibernate cycles) | `v0.3.0-stage3` | `docs/spikes/stage3-power.md` |
 | 4. Agent, tray, hotkeys, ambilight | **Gate partly run** (2026-11-04): tests 1, 2, 5 passed, 6 (HDR) skipped by the owner, 3, 4, 7, 8, 9 to repeat on the fixed build | | `docs/spikes/stage4-agent.md` |
-| 5. UI | **Started** on `stage-5-ui` at the owner's request: IPC 1.4 and the WebView2 shell; the front end waits for Node.js | | `docs/spikes/stage5-ui-plan.md` |
+| 5. UI | **In progress** on `stage-5-ui`: IPC 1.4, WebView2 shell, React front end with six pages; next: live preview, identify API, wizards | | `docs/spikes/stage5-ui-plan.md` |
 | 6 | Not started | | |
 
 What works today on the owner's PC:
@@ -103,7 +103,7 @@ These come from the owner during stages 0-3 and add to `CLAUDE.md`:
 | Razer Synapse 3, Logitech G HUB, AmbiBox | Installed; their autostart is disabled (StartupApproved). **The owner wants them kept.** The `Razer Chroma SDK Server` service runs (it only talks to the Razer keyboard). AmbiBox must never run (it would take COM3). | n/a |
 | .NET 10 SDK 10.0.403 | User-local in `%LOCALAPPDATA%\Microsoft\dotnet`. The machine-wide install has runtimes only. | Delete the folder |
 | GitHub CLI 2.103.3 | `C:\Program Files\GitHub CLI\gh.exe` (winget). Logged in as `Radek-Wojcik` (keyring); git uses it for HTTPS. **It is not on PATH in an old shell:** prepend `C:\Program Files\GitHub CLI`. | `winget uninstall GitHub.cli` |
-| Node.js | **Not installed** (needed in stage 5 for the React front end). | n/a |
+| Node.js | **Portable Node 24.22.2 LTS in `%USERPROFILE%\.tools\nodejs`** (2026-11-04, owner's OK, SHA-256 checked against nodejs.org SHASUMS256.txt). Not on PATH; `tools\Build-Frontend.ps1` finds it. Not in `%LOCALAPPDATA%` because writes there from Claude's shell land in the MSIX LocalCache (lesson 19). | Delete the folder |
 | Fast Startup | Off (`HiberbootEnabled = 0`), so "Shut down" is a cold boot. | n/a |
 | PawnIO driver | Present (`PawnIO`, manual start, running). | n/a |
 | `config.json` | Schema 2 (migrated; `config.v1.bak.json` next to it). Active profile Rainbow; the RAM group is tuned to 10 FPS, and Rainbow's RAM effect to speed 0.08, scale 0.3. Stage 4: `strip.ledCount` 133 and `strip.layout` = BottomLeft, clockwise, left 23, top 41, right 23, bottom 43, offset 9 (the strip starts mid-height on the left edge going up and ends with a 3 LED overlap). The previous file is `config.before-stage4.json`. | Edit it, or use `--group` / `--profile` |
@@ -304,10 +304,21 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
   - the SDK client;
   - the supervisor: crash restart, hung SDK, startup timeout, rescan re-apply, zone resize, black on stop, uptime wait.
 
+### Stage 5 additions (branch `stage-5-ui`)
+- IPC 1.4: `GetConfigAsync`, `UpdateConfigAsync` (revision check, validation, OpenRGB executable path protected,
+  `RestartRequired`), `GetDevicesAsync`; `AgentState.SettingsRevision` and `ConfigRevision`.
+- `LightingEngine.SetStripLayout` (layout edits apply live); the Agent reloads its settings on a new settings revision.
+- `RGBcontroller.UI`: WPF + WebView2 (`ui.rgbcontroller.example` mapped to `wwwroot`, or `fallback\` without a built
+  front end), `Bridge` (fixed method list), `ServiceClient`, single instance, dark title bar.
+- `ui/`: React 19 + TypeScript 7 + Vite 8, exact versions. Pages Dashboard, Devices, Ambilight, Profiles, Hotkeys,
+  Settings. `npm run dev` (or the `ui-dev` entry of `.claude/launch.json`, git-ignored) runs on stand-in data from
+  `src/mock-config.json`; production builds drop it. `src/strip.ts` ports `StripLayout` (keep both in step).
+
 ### Scripts
 | Script | Purpose |
 |---|---|
-| `build.ps1 [-Test] [-Configuration Release]` | Build (warnings as errors) and run tests through `dotnet test --solution` (MTP). Finds the user-local SDK. |
+| `build.ps1 [-Test] [-Configuration Release] [-SkipFrontend]` | Front end (`tools\Build-Frontend.ps1`), then the solution (warnings as errors) and tests through `dotnet test --solution` (MTP); `-Test` also runs the Vitest tests. Finds the user-local SDK. |
+| `tools/Build-Frontend.ps1 [-Test]` | `npm ci` when needed and `npm run build` in `ui/`; skipped with a warning when Node.js is missing. |
 | `tools/Get-PinnedOpenRgb.ps1` | Copies `C:\Program Files\OpenRGB` to `third_party/openrgb` (git-ignored) **without `plugins`**, after checking the SHA-256 in `third_party/openrgb-pin.json`. |
 | `install-dev.ps1` | Elevated. Steps: publish (self-contained, ReadyToRun, `--disable-build-servers`), take ownership of the data folder and set its ACL (folder only, children reset to inherit), record the `OpenRGB_Admin` state and disable it, stop old processes, copy to Program Files with robocopy `/MIR`, register the service with recovery actions, start it, show the log tail. Idempotent; re-run it to update the installed build. |
 | `uninstall-dev.ps1 [-RemoveData]` | Elevated. Stop the service (black), delete it, remove Program Files, restore and start `OpenRGB_Admin`. |
@@ -414,7 +425,7 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 | O14 | **Owner wish for the stage 5 strip wizard:** a screen where the owner marks on a drawn monitor outline where the strip starts and ends, where it turns the corners, where there is an overlap, and how many LEDs each run has; universal for any layout. The config model (`StripLayoutConfig`) already covers start corner, direction, counts, offset, overlap (wrap) and gaps. | Stage 5 |
 | O15 | Stage 4 gate 2026-11-04: 1 black screen, 2 dark scenes, 5 game passed; 6 HDR skipped (owner does not use HDR now); 3 (smoothness, letterbox), 4 (CPU), 7 (hotkeys, tray), 8 (sleep), 9 (Win+L) to repeat on the fixed build. | Stage 4 gate |
 | O16 | **Netflix and other DRM video show black** (SPEC 6.2 limitation: protected surfaces never reach Desktop Duplication). The owner wants colors there. No code workaround: the protection is in the OS and GPU. Owner-side option: a browser with hardware acceleration off (Chrome/Edge: Settings, System, "Use graphics acceleration when available"), at the cost of a lower Netflix resolution and more CPU for decoding; the Netflix Store app cannot be captured. | Owner |
-| O17 | Stage 5 needs Node.js for the React front end; ask the owner before downloading a portable Node LTS into `%LOCALAPPDATA%`. | Stage 5 |
+| O17 | **Done**: Node.js installed (section 3). | Done |
 
 ---
 
@@ -422,7 +433,7 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 
 **Current (2026-11-04):**
 1. Ask the owner to repeat stage 4 tests 3, 4 (they say "mierz", then measure), 7, 8 and 9 on the installed build.
-2. With the owner's OK: install `stage-5-ui` (`install-dev.ps1`, UAC) and download a portable Node.js LTS (O17).
+2. With the owner's OK: install `stage-5-ui` (`install-dev.ps1`, UAC) so "Open RGBcontroller" in the tray shows the new UI.
 3. Continue stage 5 with `docs/spikes/stage5-ui-plan.md` (front end, preview stream, identify API, wizards).
 
 The stage 4 gate list (still valid):

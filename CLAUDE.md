@@ -17,7 +17,8 @@ Working rules:
 
 Build and test:
 
-- `.\build.ps1 -Test` builds the solution and runs all unit tests (warnings are errors). It uses a .NET 10 SDK from PATH or the user-local one in `%LOCALAPPDATA%\Microsoft\dotnet`.
+- `.\build.ps1 -Test` builds the front end and the solution and runs all unit tests (warnings are errors). It uses a .NET 10 SDK from PATH or the user-local one in `%LOCALAPPDATA%\Microsoft\dotnet`, and Node.js from PATH or `%USERPROFILE%\.tools\nodejs`.
+- Front end: `ui/` (React + TypeScript + Vite, exact versions at least two weeks old). `npm run dev` in `ui/` runs on stand-in data for design work; the app serves `ui/dist` inside WebView2.
 - CPU measurements: `tools\Measure-RGBcontroller.ps1` (copy of the reference tool with the new process names).
 - OpenRGB SDK facts and the decision to use our own client (not OpenRGB.NET): `docs/spikes/R2-R3-openrgb-sdk.md`.
 - The System.Text.Json source generator resets missing `init` properties to default, so config records use `set`.
