@@ -212,7 +212,12 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     {
         _suspended = true;
         var sent = _lighting?.Suspend(TimeSpan.FromMilliseconds(800)) ?? true;
-        _log.Information("Suspending: black sent to all devices{Timeout}", sent ? "" : " (timed out)");
+
+        // The strip writes on its own thread; wait until the black has left the port, or the LED BOX keeps the last
+        // frame through the whole sleep.
+        var strip = _strip?.WriteBlackNow(TimeSpan.FromMilliseconds(800));
+        _log.Information("Suspending: black sent to all devices{Timeout}; strip black {Strip}", sent ? "" : " (timed out)",
+            strip switch { true => "confirmed", false => "NOT confirmed (strip not connected or too slow)", null => "-" });
         PublishState();
     }
 

@@ -95,6 +95,35 @@ public sealed class StripWriterTests
     }
 
     [Fact]
+    public async Task WriteBlackNow_ReturnsOnlyAfterTheBlackFramesAreFlushed()
+    {
+        var ports = new FakePorts { Present = "COM7" };
+        await using var writer = new StripWriter(Config, ports, Logger.None, FastTimings);
+        writer.SetAll(new RgbColor(200, 100, 50), 100);
+        writer.Start();
+        await WaitUntilAsync(() => writer.State == StripState.Connected);
+        var transport = ports.Transports[0];
+        var flushedBefore = transport.Flushed;
+
+        Assert.True(writer.WriteBlackNow(TimeSpan.FromSeconds(2)));
+
+        Assert.False(flushedBefore);
+        Assert.True(transport.Flushed);
+        Assert.All(transport.Frames.Last()[6..], b => Assert.Equal(0, b));
+    }
+
+    [Fact]
+    public async Task WriteBlackNow_FailsFastWhenTheStripIsNotConnected()
+    {
+        var ports = new FakePorts { Present = null };
+        await using var writer = new StripWriter(Config, ports, Logger.None, FastTimings);
+        writer.Start();
+        await WaitUntilAsync(() => ports.FindCalls >= 1);
+
+        Assert.False(writer.WriteBlackNow(TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
     public async Task WaitsForDeviceThenConnects()
     {
         var ports = new FakePorts { Present = null };
