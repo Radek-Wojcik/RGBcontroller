@@ -34,6 +34,13 @@ foreach ($p in Get-Process RGBcontroller.Agent -ErrorAction SilentlyContinue) {
     Step "Stopping the Agent pid $($p.Id)"
     Stop-Process -Id $p.Id -Force
 }
+foreach ($folder in [Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) {
+    $link = Join-Path $folder 'RGBcontroller.lnk'
+    if (Test-Path $link) {
+        Step "Removing the shortcut $link"
+        Remove-Item $link
+    }
+}
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 if (Get-ItemProperty -Path $runKey -Name 'RGBcontroller.Agent' -ErrorAction SilentlyContinue) {
     Step 'Removing the Agent autostart (HKCU Run)'

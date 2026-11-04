@@ -143,5 +143,18 @@ Set-ItemProperty -Path $runKey -Name $agentRunValue -Value "`"$agent`""
 # explorer.exe starts it in this user's normal (unelevated) context, like the logon autostart will.
 Start-Process explorer.exe -ArgumentList "`"$agent`""
 
+# --- 7. Shortcuts to the UI: Desktop and Start menu of the current user --------------------------------
+$ui = Join-Path $InstallDir 'RGBcontroller.UI.exe'
+Step 'Creating the RGBcontroller shortcuts on the Desktop and in the Start menu'
+$shell = New-Object -ComObject WScript.Shell
+foreach ($folder in [Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) {
+    $link = $shell.CreateShortcut((Join-Path $folder 'RGBcontroller.lnk'))
+    $link.TargetPath = $ui
+    $link.WorkingDirectory = $InstallDir
+    $link.IconLocation = "$ui,0"
+    $link.Description = 'RGB lighting and ambilight control'
+    $link.Save()
+}
+
 Write-Host ''
 Write-Host "Installed. Undo everything with: .\uninstall-dev.ps1" -ForegroundColor Green
