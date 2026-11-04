@@ -65,5 +65,11 @@ internal sealed class SerialStripTransport : IStripTransport
 
     public void Flush() => _port.BaseStream.Flush();
 
+    public int ReadAvailable(Span<byte> buffer)
+    {
+        var available = _port.BytesToRead;
+        return available == 0 ? 0 : _port.BaseStream.Read(buffer[..Math.Min(available, buffer.Length)]);
+    }
+
     public void Dispose() => _port.Dispose();
 }

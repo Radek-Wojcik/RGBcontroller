@@ -14,6 +14,9 @@ public interface IStripTransport : IDisposable
 
     /// <summary>Blocks until queued bytes are on the wire (used before closing so the black frame is not lost).</summary>
     void Flush();
+
+    /// <summary>Copies bytes the board sent (its "Ada" handshake) into <paramref name="buffer"/> without waiting; 0 when none.</summary>
+    int ReadAvailable(Span<byte> buffer);
 }
 
 /// <summary>Finds and opens the strip's serial port (by USB VID/PID or an explicit override).</summary>
@@ -38,6 +41,9 @@ public sealed record StripWriterTimings(TimeSpan Settle, TimeSpan KeepAlive, Fun
     public int StartupFrames { get; init; } = 3;
 
     public TimeSpan StartupFrameGap { get; init; } = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>Period over which the board's handshakes are counted against the frames sent.</summary>
+    public TimeSpan WatchdogWindow { get; init; } = TimeSpan.FromSeconds(3);
 
     /// <summary>Reconnect delays 0.5, 1, 2, 5 s, then every 5 s (discovery is a cheap registry lookup).</summary>
     public static TimeSpan DefaultBackoff(int attempt) => attempt switch
@@ -72,6 +78,12 @@ public sealed class StripWriter : IAsyncDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly TimeSpan _minFrameInterval;
     private readonly Stopwatch _sinceLastWrite = new();
+    private readonly Stopwatch _watchWindow = new();
+    private readonly byte[] _readBuffer = new byte[256];
+    private int _windowFrames;
+    private int _windowHandshakes;
+    private int _reopenRequested;
+    private string _reopenReason = "";
     private int _brightnessPercent;
     private Task _loop = Task.CompletedTask;
     private long _framesWritten;
@@ -136,6 +148,18 @@ public sealed class StripWriter : IAsyncDisposable
         Wake();
     }
 
+    /// <summary>
+    /// Closes and reopens the port with a fresh handle (spike R6: after resume the CH340 may keep its COM name while
+    /// the old handle no longer reaches the board, so the strip froze on its last frame while writes still
+    /// "succeeded"). Opening the port also pulses DTR, which resets the board.
+    /// </summary>
+    public void Reopen(string reason)
+    {
+        _reopenReason = reason;
+        Interlocked.Exchange(ref _reopenRequested, 1);
+        Wake();
+    }
+
     /// <summary>Writes black, closes the port and stops reconnecting. Safe to call more than once.</summary>
     public async Task StopAsync()
     {
@@ -196,9 +220,16 @@ public sealed class StripWriter : IAsyncDisposable
 
                     SetState(StripState.Connected, port);
                     attempt = 0;
-                    while (true)
+                    Interlocked.Exchange(ref _reopenRequested, 0);
+                    ResetWatchdog();
+                    while (Interlocked.Exchange(ref _reopenRequested, 0) == 0)
                     {
                         await _wake.WaitAsync(_timings.KeepAlive, token).ConfigureAwait(false);
+                        if (Volatile.Read(ref _reopenRequested) == 1)
+                        {
+                            continue;
+                        }
+
                         var wait = _minFrameInterval - _sinceLastWrite.Elapsed;
                         if (wait > TimeSpan.Zero)
                         {
@@ -206,7 +237,13 @@ public sealed class StripWriter : IAsyncDisposable
                         }
 
                         WriteCurrent(transport);
+                        Watch(transport);
                     }
+
+                    _log.Information("Reopening the strip port {Port:l} ({Reason})", port, _reopenReason);
+                    transport.Dispose();
+                    transport = null;
+                    SetState(StripState.Searching, null);
                 }
                 catch (Exception ex) when (ex is IOException or TimeoutException or UnauthorizedAccessException or InvalidOperationException)
                 {
@@ -244,6 +281,42 @@ public sealed class StripWriter : IAsyncDisposable
         transport.Write(_frame.Bytes);
         _sinceLastWrite.Restart();
         Interlocked.Increment(ref _framesWritten);
+    }
+
+    private void ResetWatchdog()
+    {
+        _windowFrames = 0;
+        _windowHandshakes = 0;
+        _watchWindow.Restart();
+    }
+
+    /// <summary>
+    /// The firmware sends "Ada" about once a second only while it receives no frames. Handshakes during a steady flow of
+    /// frames (an animation, not the 1 s keep-alive) mean the board does not take them: reopen the port.
+    /// </summary>
+    private void Watch(IStripTransport transport)
+    {
+        _windowFrames++;
+        var read = transport.ReadAvailable(_readBuffer);
+        if (read > 0 && _readBuffer.AsSpan(0, read).IndexOf("Ada"u8) >= 0)
+        {
+            _windowHandshakes++;
+        }
+
+        if (_watchWindow.Elapsed < _timings.WatchdogWindow)
+        {
+            return;
+        }
+
+        var framesPerSecond = _windowFrames / _watchWindow.Elapsed.TotalSeconds;
+        if (_windowHandshakes >= 2 && framesPerSecond >= 5)
+        {
+            _log.Warning("The strip board asked for a handshake {Count} times while receiving {Fps:0} frames per second; it is not taking frames",
+                _windowHandshakes, framesPerSecond);
+            Reopen("the board stopped taking frames");
+        }
+
+        ResetWatchdog();
     }
 
     private void WriteBlackAndClose(IStripTransport transport)
