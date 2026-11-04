@@ -80,6 +80,11 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
 
     public void Dispose()
     {
+        if (_stop.IsCancellationRequested)
+        {
+            return;
+        }
+
         _stop.Cancel();
         try
         {
