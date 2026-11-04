@@ -21,7 +21,7 @@ of truth for **what exists now**.
 | 6 | Not started | | |
 
 What works today on the owner's PC:
-- The installed build is branch `stage-5-ui` at commit 8f23abe (`--status` reports 0.3.0, IPC 1.4): stage 4 fixes,
+- The installed build is branch `stage-5-ui` at commit b12dbb4 (`--status` reports 0.3.0, IPC 1.4): stage 4 fixes,
   the UI with the React front end, and the USB hot-plug rescan. Versions are bumped when the gates pass.
 - **Stage 4:** the Agent runs in the tray (started at logon from HKCU Run), mirrors the screen to the strip (Screen
   mode) while the session is unlocked and the display is on, and has hotkeys Ctrl+F9 (solid toggle), Ctrl+F10 (cycle
@@ -403,6 +403,15 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
     `OpenRgbSupervisor.NotifyUsbDeviceArrived`: 3 s after the last arrival the single OpenRGB rescans and everything is
     re-applied. The strip's CH340 is skipped. The owner's report of a "frozen" Agent at the same time was the strip
     being disconnected: the Agent's message loop ran the whole time.
+24. **"Frozen" strip after resume (2026-11-04 evening), diagnosed with logs, `dotnet-stack` and `dotnet-dump
+    dumpasync` of the Agent (tools in the scratchpad, `dotnet tool install --tool-path`):** no thread or async call
+    hung; every hotkey reached the Service (brightness up at 100% is a no-op and is not logged). After the 19:21
+    resume COM7 kept its name and writes "succeeded" while the strip stayed on its last frame. Fixes:
+    `StripWriter.Reopen` on every resume, a watchdog that reopens the port when the board sends "Ada" handshakes
+    while an animation is being sent, a hotkey OSD in the Agent (`Tray/HotkeyOsd`) so a no-op hotkey is visible,
+    and a 5 s command timeout that drops a dead control link. Also: DPI-aware tray slider label, app icon
+    (`tools/make-icon.py` -> `assets/rgbcontroller.ico`), Desktop and Start menu shortcuts from `install-dev.ps1`.
+    Note: the Service log is buffered, so the newest lines can appear a few seconds late.
 23. **The Service writes every key into `config.json`**, so a changed code default never reaches an existing
     install. Change the owner's file too (elevated edit with the Service stopped, backup next to it), or add a
     migration. Backup made on 2026-11-04: `config.before-stage4-fixes.json`.
