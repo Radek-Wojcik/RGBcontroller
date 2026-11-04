@@ -19,6 +19,9 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
     private static readonly TimeSpan[] Backoff = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5)];
     private static readonly TimeSpan IncompatibleRetry = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan FramePipeRetry = TimeSpan.FromSeconds(1);
+
+    /// <summary>A command the Service does not answer within this time means a dead link: reconnect.</summary>
+    private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(5);
     private static readonly string AppVersion = typeof(ServiceConnection).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
     private readonly SynchronizationContext _ui;
@@ -27,6 +30,7 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
     private readonly Lock _frameLock = new();
     private Task _loop = Task.CompletedTask;
     private volatile IServiceControl? _service;
+    private volatile JsonRpc? _rpc;
     private long _lastSequence;
     private long _settingsRevision;
     private NamedPipeClientStream? _frames;
@@ -48,10 +52,17 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
 
     public void Start() => _loop = Task.Run(RunAsync);
 
-    /// <summary>Sends a command if connected; failures are logged, never thrown (hotkeys and menu clicks).</summary>
-    public void Send(string what, Func<IServiceControl, Task<CommandResult>> command)
+    public bool IsConnected => _service is not null;
+
+    /// <summary>
+    /// Sends a command if connected; failures are logged, never thrown (hotkeys and menu clicks). A command without an
+    /// answer within <see cref="CommandTimeout"/> drops the connection, so the next one runs on a fresh link instead
+    /// of waiting forever.
+    /// </summary>
+    public void Send(string what, Func<IServiceControl, CancellationToken, Task<CommandResult>> command)
     {
         var service = _service;
+        var rpc = _rpc;
         if (service is null)
         {
             _log.Information("{What} ignored: the Service is not connected", what);
@@ -60,15 +71,22 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
 
         _ = Task.Run(async () =>
         {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+            timeout.CancelAfter(CommandTimeout);
             try
             {
-                var result = await command(service).ConfigureAwait(false);
+                var result = await command(service, timeout.Token).ConfigureAwait(false);
                 if (!result.Success)
                 {
                     _log.Warning("{What} refused: {Message}", what, result.Message);
                 }
             }
-            catch (Exception ex) when (ex is RemoteRpcException or ConnectionLostException or ObjectDisposedException or IOException)
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested && !_stop.IsCancellationRequested)
+            {
+                _log.Warning("{What}: the Service did not answer within {Seconds} s; reconnecting", what, CommandTimeout.TotalSeconds);
+                rpc?.Dispose();
+            }
+            catch (Exception ex) when (ex is RemoteRpcException or ConnectionLostException or ObjectDisposedException or IOException or OperationCanceledException)
             {
                 _log.Warning("{What} failed: {Error}", what, ex.Message);
             }
@@ -129,6 +147,7 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
 
                 Interlocked.Exchange(ref _lastSequence, 0);
                 var state = await service.SubscribeAsync(_stop.Token).ConfigureAwait(false);
+                _rpc = rpc;
                 Interlocked.Exchange(ref _settingsRevision, state.SettingsRevision);
                 var settings = await service.GetAgentSettingsAsync(_stop.Token).ConfigureAwait(false);
                 _ui.Post(_ => SettingsChanged?.Invoke(settings), null);
@@ -137,7 +156,15 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
                 _log.Information("Connected to RGBcontroller.Service {Version} (IPC {Protocol})", hello.AppVersion, hello.ProtocolVersion);
                 attempt = 0;
 
-                await rpc.Completion.WaitAsync(_stop.Token).ConfigureAwait(false);
+                try
+                {
+                    await rpc.Completion.WaitAsync(_stop.Token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is ObjectDisposedException or ConnectionLostException or IOException)
+                {
+                    // Dropped by a command timeout or a broken pipe; reconnect below.
+                }
+
                 _log.Information("Service connection closed");
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested)
@@ -160,6 +187,7 @@ internal sealed class ServiceConnection : IStripFrameSink, IDisposable
             }
             finally
             {
+                _rpc = null;
                 if (_service is not null)
                 {
                     _service = null;

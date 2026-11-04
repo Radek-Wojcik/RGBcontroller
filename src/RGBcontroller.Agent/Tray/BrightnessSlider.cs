@@ -8,9 +8,9 @@ namespace RGBcontroller.Agent.Tray;
 /// </summary>
 internal sealed class BrightnessSlider : Control
 {
-    private const int TrackHeight = 4;
-    private const int ThumbWidth = 6;
-    private const int LabelWidth = 44;
+    private const int TrackHeightLogical = 4;
+    private const int ThumbWidthLogical = 6;
+    private const int LabelGapLogical = 10;
     private int _value;
     private bool _dragging;
 
@@ -56,12 +56,15 @@ internal sealed class BrightnessSlider : Control
         using (var accent = new SolidBrush(TrayTheme.Accent))
         {
             g.FillRectangle(accent, track.Left, track.Top, filled, track.Height);
-            var thumb = new Rectangle(track.Left + filled - ThumbWidth / 2, track.Top - 6, ThumbWidth, track.Height + 12);
+            var thumbWidth = LogicalToDeviceUnits(ThumbWidthLogical);
+            var reach = LogicalToDeviceUnits(6);
+            var thumb = new Rectangle(track.Left + filled - thumbWidth / 2, track.Top - reach, thumbWidth, track.Height + 2 * reach);
             g.FillRectangle(Focused || _dragging ? accent : Brushes.White, thumb);
         }
 
         TextRenderer.DrawText(g, _value.ToString(CultureInfo.InvariantCulture) + "%", Font,
-            new Rectangle(Width - LabelWidth, 0, LabelWidth, Height), TrayTheme.Text, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            new Rectangle(Width - LabelWidth, 0, LabelWidth, Height), TrayTheme.Text,
+            TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -133,7 +136,21 @@ internal sealed class BrightnessSlider : Control
         Invalidate();
     }
 
-    private Rectangle TrackBounds => new(ThumbWidth, Height / 2 - TrackHeight / 2, Math.Max(1, Width - LabelWidth - ThumbWidth * 2), TrackHeight);
+    /// <summary>
+    /// Room for "100%" in the current font and DPI plus a gap; a fixed 44 px let the label run into the track on the
+    /// owner's 4K monitor with display scaling (stage 4 gate).
+    /// </summary>
+    private int LabelWidth => TextRenderer.MeasureText("100%", Font, Size.Empty, TextFormatFlags.NoPadding).Width + LogicalToDeviceUnits(LabelGapLogical);
+
+    private Rectangle TrackBounds
+    {
+        get
+        {
+            var thumb = LogicalToDeviceUnits(ThumbWidthLogical);
+            var height = LogicalToDeviceUnits(TrackHeightLogical);
+            return new(thumb, Height / 2 - height / 2, Math.Max(1, Width - LabelWidth - thumb * 2), height);
+        }
+    }
 
     private void SetFromMouse(int x)
     {

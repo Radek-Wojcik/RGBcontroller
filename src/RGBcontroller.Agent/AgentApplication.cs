@@ -35,6 +35,9 @@ internal sealed class AgentApplication : ApplicationContext
     private AgentSettings? _settings;
     private ScreenCaptureLoop? _capture;
     private int? _pendingBrightness;
+    private HotkeyOsd? _osd;
+    private HotkeyBinding? _osdFor;
+    private long _osdUntil;
     private bool _disposed;
 
     public AgentApplication(ILogger log)
@@ -61,6 +64,7 @@ internal sealed class AgentApplication : ApplicationContext
             _tray.Visible = false;
             _tray.Dispose();
             _menu?.Dispose();
+            _osd?.Dispose();
             _hotkeys.Dispose();
             _brightnessThrottle.Dispose();
             _service.Dispose();
@@ -100,6 +104,44 @@ internal sealed class AgentApplication : ApplicationContext
         _state = state;
         UpdateCapture();
         UpdateTray();
+        if (_osdFor is { } binding && Environment.TickCount64 < _osdUntil)
+        {
+            ShowOsd(binding);
+        }
+    }
+
+    /// <summary>What the strip (or profile) is now, after a hotkey; refreshed when the Service's new state arrives.</summary>
+    private void ShowOsd(HotkeyBinding binding)
+    {
+        _osd ??= new HotkeyOsd();
+        var state = _state;
+        if (state is null)
+        {
+            _osd.ShowNote("RGBCONTROLLER", "Service not connected", null);
+            return;
+        }
+
+        switch (binding.Action)
+        {
+            case HotkeyAction.NextProfile or HotkeyAction.PreviousProfile or HotkeyAction.Profile:
+                _osd.ShowNote("PROFILE", state.ActiveProfile, null);
+                break;
+            case HotkeyAction.AllOffToggle:
+                _osd.ShowNote("EVERYTHING", state.AllOff ? "off" : "on", null);
+                break;
+            default:
+                var level = state.StripBrightnessPercent;
+                var limit = binding.Action switch
+                {
+                    HotkeyAction.StripBrightnessUp when level >= 100 => " (max)",
+                    HotkeyAction.StripBrightnessDown when level <= 0 => " (min)",
+                    _ => "",
+                };
+                var mode = StripModes.First(m => m.Mode == state.StripMode).Label;
+                _osd.ShowNote("AMBILIGHT", state.StripMode == AmbilightMode.Off ? "Off" : $"{mode} · {level}%{limit}",
+                    state.StripMode == AmbilightMode.Off ? null : level);
+                break;
+        }
     }
 
     private void UpdateCapture()
@@ -215,7 +257,7 @@ internal sealed class AgentApplication : ApplicationContext
         var profiles = Item("Profiles", connected, null);
         foreach (var name in state?.Profiles ?? [])
         {
-            var profile = Item(name, true, () => _service.Send($"Profile {name}", s => s.SetActiveProfileAsync(name, CancellationToken.None)));
+            var profile = Item(name, true, () => _service.Send($"Profile {name}", (s, ct) => s.SetActiveProfileAsync(name, ct)));
             profile.Checked = string.Equals(name, state!.ActiveProfile, StringComparison.OrdinalIgnoreCase);
             profiles.DropDownItems.Add(profile);
         }
@@ -226,7 +268,7 @@ internal sealed class AgentApplication : ApplicationContext
         var strip = Item("Ambilight", connected, null);
         foreach (var (mode, label) in StripModes)
         {
-            var item = Item(label, true, () => _service.Send($"Strip {mode}", s => s.ChangeStripAsync(new StripChangeRequest(Mode: mode), CancellationToken.None)));
+            var item = Item(label, true, () => _service.Send($"Strip {mode}", (s, ct) => s.ChangeStripAsync(new StripChangeRequest(Mode: mode), ct)));
             item.Checked = state?.StripMode == mode;
             strip.DropDownItems.Add(item);
         }
@@ -240,7 +282,7 @@ internal sealed class AgentApplication : ApplicationContext
 
         var allOff = state?.AllOff == true;
         menu.Items.Add(Item(allOff ? "Turn everything on" : "Turn everything off", connected,
-            () => _service.Send(allOff ? "All on" : "All off", s => s.SetAllOffAsync(!allOff, CancellationToken.None))));
+            () => _service.Send(allOff ? "All on" : "All off", (s, ct) => s.SetAllOffAsync(!allOff, ct))));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(Item("Exit Agent", true, ExitThread));
         menu.ResumeLayout();
@@ -250,7 +292,8 @@ internal sealed class AgentApplication : ApplicationContext
     {
         if (_slider is null)
         {
-            _slider = new BrightnessSlider { Size = new Size(200, 28) };
+            _slider = new BrightnessSlider();
+            _slider.Size = _slider.LogicalToDeviceUnits(new Size(220, 28));
             _slider.ValueChanged += (_, _) =>
             {
                 _pendingBrightness = _slider.Value;
@@ -260,7 +303,12 @@ internal sealed class AgentApplication : ApplicationContext
 
         _slider.Value = value;
         _slider.Enabled = enabled;
-        return _sliderHost ??= new ToolStripControlHost(_slider) { AutoSize = false, Size = new Size(200, 28), Margin = new Padding(8, 0, 8, 4) };
+        return _sliderHost ??= new ToolStripControlHost(_slider)
+        {
+            AutoSize = false,
+            Size = _slider.Size,
+            Margin = new Padding(_slider.LogicalToDeviceUnits(8), 0, _slider.LogicalToDeviceUnits(8), _slider.LogicalToDeviceUnits(4)),
+        };
     }
 
     private void FlushBrightness()
@@ -269,25 +317,28 @@ internal sealed class AgentApplication : ApplicationContext
         if (_pendingBrightness is { } value)
         {
             _pendingBrightness = null;
-            _service.Send($"Strip brightness {value}%", s => s.ChangeStripAsync(new StripChangeRequest(BrightnessPercent: value), CancellationToken.None));
+            _service.Send($"Strip brightness {value}%", (s, ct) => s.ChangeStripAsync(new StripChangeRequest(BrightnessPercent: value), ct));
         }
     }
 
     private void OnHotkey(HotkeyBinding binding)
     {
         var step = _settings?.Hotkeys.BrightnessStepPercent ?? 10;
-        Func<IServiceControl, Task<CommandResult>> command = binding.Action switch
+        Func<IServiceControl, CancellationToken, Task<CommandResult>> command = binding.Action switch
         {
-            HotkeyAction.StripSolidToggle => s => s.ChangeStripAsync(new StripChangeRequest(ToggleSolid: true), CancellationToken.None),
-            HotkeyAction.StripBrightnessUp => s => s.ChangeStripAsync(new StripChangeRequest(BrightnessDelta: step), CancellationToken.None),
-            HotkeyAction.StripBrightnessDown => s => s.ChangeStripAsync(new StripChangeRequest(BrightnessDelta: -step), CancellationToken.None),
-            HotkeyAction.CycleStripMode => s => s.ChangeStripAsync(new StripChangeRequest(CycleMode: true), CancellationToken.None),
-            HotkeyAction.NextProfile => s => s.StepProfileAsync(1, CancellationToken.None),
-            HotkeyAction.PreviousProfile => s => s.StepProfileAsync(-1, CancellationToken.None),
-            HotkeyAction.Profile => s => s.SetActiveProfileAsync(binding.Profile ?? "", CancellationToken.None),
-            _ => s => s.SetAllOffAsync(_state?.AllOff != true, CancellationToken.None),
+            HotkeyAction.StripSolidToggle => (s, ct) => s.ChangeStripAsync(new StripChangeRequest(ToggleSolid: true), ct),
+            HotkeyAction.StripBrightnessUp => (s, ct) => s.ChangeStripAsync(new StripChangeRequest(BrightnessDelta: step), ct),
+            HotkeyAction.StripBrightnessDown => (s, ct) => s.ChangeStripAsync(new StripChangeRequest(BrightnessDelta: -step), ct),
+            HotkeyAction.CycleStripMode => (s, ct) => s.ChangeStripAsync(new StripChangeRequest(CycleMode: true), ct),
+            HotkeyAction.NextProfile => (s, ct) => s.StepProfileAsync(1, ct),
+            HotkeyAction.PreviousProfile => (s, ct) => s.StepProfileAsync(-1, ct),
+            HotkeyAction.Profile => (s, ct) => s.SetActiveProfileAsync(binding.Profile ?? "", ct),
+            _ => (s, ct) => s.SetAllOffAsync(_state?.AllOff != true, ct),
         };
         _service.Send($"Hotkey {binding.Keys}", command);
+        _osdFor = binding;
+        _osdUntil = Environment.TickCount64 + 1500;
+        ShowOsd(binding);
     }
 
     private void Launch(string path)
