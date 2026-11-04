@@ -35,6 +35,7 @@ public static partial class ConfigValidator
         CheckRange(errors, "capture.attackMilliseconds", capture.AttackMilliseconds, 0, 5000);
         CheckRange(errors, "capture.releaseMilliseconds", capture.ReleaseMilliseconds, 0, 5000);
         CheckRange(errors, "capture.blackReleaseMilliseconds", capture.BlackReleaseMilliseconds, 0, 5000);
+        CheckRange(errors, "capture.fadeInMilliseconds", capture.FadeInMilliseconds, 0, 10000);
         CheckRange(errors, "capture.letterboxStableMilliseconds", capture.LetterboxStableMilliseconds, 0, 30_000);
         CheckRange(errors, "capture.hdrSdrWhiteNits", capture.HdrSdrWhiteNits, 0, 1000);
         CheckRange(errors, "capture.fallbackGraceMilliseconds", capture.FallbackGraceMilliseconds, 0, 30_000);

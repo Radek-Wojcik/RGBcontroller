@@ -8,8 +8,9 @@ namespace RGBcontroller.Core.Ambilight;
 /// desktop frame into one target color per LED: letterbox detection, edge band average, black threshold with a soft
 /// knee, gamma, saturation. <see cref="Step"/> (output rate, about 30 FPS) moves the output towards the targets with
 /// separate attack and release time constants; towards black it uses the short black release and snaps to exactly 0,
-/// so a black screen means the strip is off and a fade to black leaves no glow. Brightness and the current limiter
-/// are applied by the Service. Nothing here allocates after construction.
+/// so a black screen means the strip is off and a fade to black leaves no glow. A new pipeline fades its output in over
+/// <see cref="ScreenCaptureConfig.FadeInMilliseconds"/>, so starting Screen mode is not an abrupt flash. Brightness and
+/// the current limiter are applied by the Service. Nothing here allocates after construction.
 /// </summary>
 public sealed class AmbilightPipeline
 {
@@ -26,6 +27,7 @@ public sealed class AmbilightPipeline
     private readonly Vector3[] _target;
     private readonly Vector3[] _current;
     private readonly RgbColor[] _output;
+    private float _fadeInElapsed;
 
     /// <param name="screenWidthCm">Physical width of the visible screen (EDID or the setting).</param>
     public AmbilightPipeline(StripLayout layout, ScreenCaptureConfig config, double screenWidthCm)
@@ -86,7 +88,14 @@ public sealed class AmbilightPipeline
         var attack = Alpha(dt, _config.AttackMilliseconds);
         var release = Alpha(dt, _config.ReleaseMilliseconds);
         var blackRelease = Alpha(dt, _config.BlackReleaseMilliseconds);
-        var settled = true;
+        var fadeIn = 1f;
+        if (_config.FadeInMilliseconds > 0 && _fadeInElapsed < _config.FadeInMilliseconds)
+        {
+            _fadeInElapsed += dt;
+            fadeIn = Math.Min(1, _fadeInElapsed / _config.FadeInMilliseconds);
+        }
+
+        var settled = fadeIn >= 1;
         var changed = false;
         for (var i = 0; i < _current.Length; i++)
         {
@@ -103,7 +112,8 @@ public sealed class AmbilightPipeline
 
             _current[i] = current;
             settled &= current == target;
-            var color = new RgbColor(ToByte(current.X), ToByte(current.Y), ToByte(current.Z));
+            var shown = current * fadeIn;
+            var color = new RgbColor(ToByte(shown.X), ToByte(shown.Y), ToByte(shown.Z));
             if (color != _output[i])
             {
                 _output[i] = color;
