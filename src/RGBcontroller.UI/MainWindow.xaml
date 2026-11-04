@@ -1,12 +1,14 @@
 ﻿<Window x:Class="RGBcontroller.UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="RGBcontroller" Height="450" Width="800"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="RGBcontroller" Width="1280" Height="820" MinWidth="720" MinHeight="480"
+        WindowStartupLocation="CenterScreen"
         Background="#0B0D12" Foreground="#C8D3E0">
-    <!-- Stage 0 placeholder. The WebView2 shell and the web front end arrive in stage 5. -->
     <Grid>
-        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
-                   FontFamily="Consolas" FontSize="16"
-                   Text="RGBcontroller UI: arrives in stage 5" />
+        <TextBlock x:Name="Message" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontFamily="Consolas" FontSize="14" TextWrapping="Wrap" Margin="24"
+                   Text="Starting..." />
+        <wv2:WebView2 x:Name="Web" DefaultBackgroundColor="#0B0D12" Visibility="Hidden" />
     </Grid>
 </Window>

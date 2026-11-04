@@ -26,6 +26,10 @@ $stateFile = Join-Path $dataDir 'dev-install\state.json'
 
 function Step($text) { Write-Host "==> $text" -ForegroundColor Cyan }
 
+foreach ($p in Get-Process RGBcontroller.UI -ErrorAction SilentlyContinue) {
+    Step "Closing the UI pid $($p.Id)"
+    Stop-Process -Id $p.Id -Force
+}
 foreach ($p in Get-Process RGBcontroller.Agent -ErrorAction SilentlyContinue) {
     Step "Stopping the Agent pid $($p.Id)"
     Stop-Process -Id $p.Id -Force
