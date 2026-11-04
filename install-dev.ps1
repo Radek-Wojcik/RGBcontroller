@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Run from an elevated PowerShell. Steps, all logged to the console:
-      1. publishes the Service and the Agent (self-contained, ReadyToRun) together with the pinned OpenRGB copy,
+      1. publishes the Service, the Agent and the UI (self-contained, ReadyToRun) together with the pinned OpenRGB copy,
       2. creates %ProgramData%\RGBcontroller (write: SYSTEM and Administrators, read: Users), records and then
          DISABLES (never deletes) the existing OpenRGB autostart task and stops that OpenRGB,
       3. copies the build to C:\Program Files\RGBcontroller,
@@ -51,7 +51,7 @@ if (-not (Test-Path $dotnet)) { $dotnet = 'dotnet' }
 $publishDir = Join-Path $root 'artifacts\publish\app'
 if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
 # Both executables share one self-contained folder; their common libraries have the same (central) versions.
-foreach ($project in 'RGBcontroller.Service', 'RGBcontroller.Agent') {
+foreach ($project in 'RGBcontroller.Service', 'RGBcontroller.Agent', 'RGBcontroller.UI') {
     Step "Publishing $project (Release, win-x64, self-contained, ReadyToRun)"
     & $dotnet publish (Join-Path $root "src\$project\$project.csproj") `
         -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o $publishDir --nologo --disable-build-servers
@@ -102,6 +102,10 @@ foreach ($p in Get-Process OpenRGB -ErrorAction SilentlyContinue) {
 }
 foreach ($p in Get-Process RGBcontroller.Agent -ErrorAction SilentlyContinue) {
     Write-Host "    Stopping the Agent pid $($p.Id) (it is started again below)"
+    Stop-Process -Id $p.Id -Force
+}
+foreach ($p in Get-Process RGBcontroller.UI -ErrorAction SilentlyContinue) {
+    Write-Host "    Closing the UI pid $($p.Id)"
     Stop-Process -Id $p.Id -Force
 }
 
