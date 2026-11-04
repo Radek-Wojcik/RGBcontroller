@@ -250,7 +250,7 @@ public sealed record AmbilightConfig
     public AmbilightMode Fallback { get; set; } = AmbilightMode.Radial;
 
     /// <summary>0-100 for Screen and Radial; 100 means full diode power (255).</summary>
-    public int BrightnessPercent { get; set; } = 50;
+    public int BrightnessPercent { get; set; } = 100;
 
     public string SolidColor { get; set; } = "#FFFFFF";
 
