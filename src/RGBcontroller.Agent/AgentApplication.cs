@@ -35,6 +35,7 @@ internal sealed class AgentApplication : ApplicationContext
     private AgentSettings? _settings;
     private ScreenCaptureLoop? _capture;
     private int? _pendingBrightness;
+    private bool _disposed;
 
     public AgentApplication(ILogger log)
     {
@@ -51,8 +52,10 @@ internal sealed class AgentApplication : ApplicationContext
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        // WinForms disposes the context when the message loop ends and Program's using block does it again.
+        if (disposing && !_disposed)
         {
+            _disposed = true;
             _log.Information("Agent exiting");
             StopCapture();
             _tray.Visible = false;
