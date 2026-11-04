@@ -412,7 +412,12 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
     and a 5 s command timeout that drops a dead control link. Also: DPI-aware tray slider label, app icon
     (`tools/make-icon.py` -> `assets/rgbcontroller.ico`), Desktop and Start menu shortcuts from `install-dev.ps1`.
     Note: the Service log is buffered, so the newest lines can appear a few seconds late.
-24. **The Service writes every key into `config.json`**, so a changed code default never reaches an existing
+24. **Strip stayed lit through sleep and after shutdown (2026-11-04):** the black never reached the LED BOX, which
+    keeps its last frame on its own 5 V supply. Suspend only handed black to the writer thread (Windows slept 48 ms
+    later); at shutdown the port closed 20 ms after three black frames that need about 105 ms at 115200 baud, and the
+    CH340 driver returns from Flush at once. Fixed in b0c77cc (`StripWriter.WriteBlackNow` on suspend, drain wait
+    on every black write); **not installed yet** (the UAC prompt was cancelled).
+25. **The Service writes every key into `config.json`**, so a changed code default never reaches an existing
     install. Change the owner's file too (elevated edit with the Service stopped, backup next to it), or add a
     migration. Backup made on 2026-11-04: `config.before-stage4-fixes.json`.
 
