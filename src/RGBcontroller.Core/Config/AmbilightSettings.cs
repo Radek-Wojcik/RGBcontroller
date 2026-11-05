@@ -89,7 +89,7 @@ public sealed record ScreenCaptureConfig
     public int BlackKnee { get; set; } = 10;
 
     /// <summary>Output = input ^ gamma (0..1); above 1 keeps dark scenes dark.</summary>
-    public double Gamma { get; set; } = 2.0;
+    public double Gamma { get; set; } = 1.5;
 
     /// <summary>1 keeps the colors; 0 is grey, above 1 more saturated.</summary>
     public double Saturation { get; set; } = 1.0;
