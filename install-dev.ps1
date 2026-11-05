@@ -151,7 +151,8 @@ foreach ($folder in [Environment]::GetFolderPath('Desktop'), [Environment]::GetF
     $link = $shell.CreateShortcut((Join-Path $folder 'RGBcontroller.lnk'))
     $link.TargetPath = $ui
     $link.WorkingDirectory = $InstallDir
-    $link.IconLocation = "$ui,0"
+    # The .ico file, not the exe: Explorer caches icons per path and kept showing the old one after an update.
+    $link.IconLocation = "$(Join-Path $InstallDir 'rgbcontroller.ico'),0"
     $link.Description = 'RGB lighting and ambilight control'
     $link.Save()
 }
