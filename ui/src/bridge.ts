@@ -15,6 +15,7 @@ interface WebView {
 }
 
 function webViewHost(): Host | null {
+  if (typeof window === "undefined") return null; // unit tests
   const webview = (window as unknown as { chrome?: { webview?: WebView } }).chrome?.webview;
   if (!webview) return null;
   return {
@@ -31,6 +32,8 @@ export class Bridge {
   private nextId = 1;
   private readonly pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private readonly listeners = new Set<(e: BridgeEvent) => void>();
+  /** The latest event of each kind: the host may send them before React subscribes (they were lost, "Waiting for the Service"). */
+  private readonly latest = new Map<string, BridgeEvent>();
 
   constructor(private readonly host: Host) {
     host.onMessage(raw => this.receive(raw));
@@ -46,6 +49,7 @@ export class Bridge {
 
   subscribe(listener: (e: BridgeEvent) => void): () => void {
     this.listeners.add(listener);
+    for (const event of this.latest.values()) listener(event);
     return () => this.listeners.delete(listener);
   }
 
@@ -64,6 +68,7 @@ export class Bridge {
       if (message.error !== undefined) waiting.reject(new Error(message.error));
       else waiting.resolve(message.result);
     } else if (message.event === "connection" || message.event === "state") {
+      this.latest.set(message.event, message as BridgeEvent);
       for (const listener of this.listeners) listener(message as BridgeEvent);
     }
   }
