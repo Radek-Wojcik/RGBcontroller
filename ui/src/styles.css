@@ -286,3 +286,8 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .screen-brand .name b { color: var(--accent); font-weight: 600; }
 .screen-brand .mode { font: 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+
+.ambilight-theme { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px dotted var(--line); }
+.ambilight-head { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.theme-swatch { flex: 1; height: 8px; background: var(--faint); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.ambilight-theme .segmented button { height: 28px; padding: 0 10px; font-size: 12px; }
