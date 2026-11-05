@@ -21,6 +21,9 @@ internal static partial class ConsoleSession
     private const int UserNameOffset = 86;
     private const int WtsSessionStateLock = 0;
 
+    /// <summary>Session attached to the physical console, or 0xFFFFFFFF while it is switching.</summary>
+    public static uint ActiveSessionId => WTSGetActiveConsoleSessionId();
+
     public static ConsoleSessionInfo Query()
     {
         var sessionId = WTSGetActiveConsoleSessionId();

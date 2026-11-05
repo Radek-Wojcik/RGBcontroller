@@ -306,6 +306,57 @@ public sealed class LightingEngineTests
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 
+    [Fact]
+    public void ScreenMode_ShowsTheFallbackUntilTheAgentSendsColors()
+    {
+        var engine = Engine(ScreenConfig(), stripLeds: 4);
+        var output = new RecordingOutput();
+
+        Assert.True(engine.IsScreenWanted);
+        Assert.False(engine.PushScreenFrame([new RgbColor(9, 9, 9)]));
+        Assert.NotNull(engine.Render(TimeSpan.Zero, output));
+        Assert.Contains(output.Strip, c => c != default);
+
+        RgbColor[] screen = [new(200, 0, 0), new(0, 200, 0), new(0, 0, 200), new(10, 20, 30)];
+        engine.SetScreenFeed(true);
+        engine.Render(TimeSpan.FromSeconds(1), output);
+        Assert.True(engine.PushScreenFrame(screen));
+        var writes = output.StripWrites;
+        Assert.Null(engine.Render(TimeSpan.FromSeconds(1.1), output));
+        Assert.Equal(writes + 1, output.StripWrites);
+        // 50% strip brightness from the profile is applied to the Agent's colors.
+        Assert.Equal([new(100, 0, 0), new(0, 100, 0), new(0, 0, 100), new(5, 10, 15)], output.Strip);
+
+        engine.SetScreenFeed(false);
+        Assert.NotNull(engine.Render(TimeSpan.FromSeconds(2), output));
+    }
+
+    [Fact]
+    public void ScreenIsNotWantedWhileLockedOrAllOff()
+    {
+        var engine = Engine(ScreenConfig(), stripLeds: 4);
+        engine.SetScreenFeed(true);
+
+        engine.SetSituation(new LightingSituation(SessionKind.Locked, DisplayOn: true));
+        Assert.False(engine.IsScreenWanted);
+        var output = new RecordingOutput();
+        Assert.NotNull(engine.Render(TimeSpan.Zero, output));
+        Assert.False(engine.PushScreenFrame([new RgbColor(1, 2, 3)]));
+
+        engine.SetSituation(LightingSituation.Default);
+        Assert.True(engine.IsScreenWanted);
+        engine.SetAllOff(true);
+        Assert.False(engine.IsScreenWanted);
+        engine.Render(TimeSpan.FromSeconds(1), output);
+        Assert.All(output.Strip, c => Assert.Equal(default, c));
+    }
+
+    private static LightingConfig ScreenConfig() => new()
+    {
+        ActiveProfile = "Screen",
+        Profiles = [new ProfileConfig { Name = "Screen", Ambilight = new AmbilightConfig { Mode = AmbilightMode.Screen, BrightnessPercent = 50 } }],
+    };
+
     private static LightingEngine Engine(LightingConfig config, int stripLeds = 0) => new(config, stripLeds, 30, Logger.None);
 
     private static LightingConfig Config(string activeProfile) => new() { ActiveProfile = activeProfile };

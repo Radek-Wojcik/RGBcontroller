@@ -1,3 +1,4 @@
+using RGBcontroller.Core.Ambilight;
 using RGBcontroller.Core.Config;
 using RGBcontroller.Core.Effects;
 using RGBcontroller.Core.OpenRgb;
@@ -45,6 +46,9 @@ public sealed class LightingEngine
     private readonly ILogger _log;
     private readonly int _stripLedCount;
     private readonly int _stripMaxFps;
+    private LedPoint[] _stripPoints;
+    private IReadOnlyList<(int Start, int Count)> _stripRuns;
+    private readonly RgbColor[] _screen;
     private readonly Dictionary<int, int> _sentModes = [];
     private LightingConfig _config;
     private IReadOnlyList<ControllerData> _devices = [];
@@ -52,15 +56,103 @@ public sealed class LightingEngine
     private bool _rebuild = true;
     private bool _blackout;
     private LightingSituation _situation = LightingSituation.Default;
+    private bool _allOff;
+    private bool _stripTest;
+    private bool _screenLive;
+    private Target? _screenTarget;
 
     /// <param name="stripLedCount">0 when the strip is disabled.</param>
-    public LightingEngine(LightingConfig config, int stripLedCount, int stripMaxFps, ILogger log)
+    /// <param name="stripLayout">LED positions around the monitor; null spreads the LEDs on a ring.</param>
+    public LightingEngine(LightingConfig config, int stripLedCount, int stripMaxFps, ILogger log, StripLayout? stripLayout = null)
     {
         ArgumentNullException.ThrowIfNull(config);
         _config = config;
         _stripLedCount = stripLedCount;
         _stripMaxFps = Math.Max(1, stripMaxFps);
+        _stripPoints = stripLayout?.LedCount == stripLedCount ? stripLayout.ToPoints() : LedLayoutBuilder.Ring(stripLedCount);
+        _stripRuns = stripLayout?.LedCount == stripLedCount ? stripLayout.LitRuns() : [(0, stripLedCount)];
+        _screen = new RgbColor[stripLedCount];
         _log = log.ForContext<LightingEngine>();
+    }
+
+    /// <summary>
+    /// True while the strip should mirror the screen (SPEC 4 and 6.2): the shown profile is in Screen mode, the session
+    /// is unlocked, the display is on and nothing forces the strip off. The Agent captures only then.
+    /// </summary>
+    public bool IsScreenWanted
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var profile = _config.FindProfile(SessionPolicy.ProfileFor(_config, _situation.Session));
+                return !_blackout && !_allOff && _stripLedCount > 0 && profile?.Ambilight.Mode == AmbilightMode.Screen
+                    && _situation is { Session: SessionKind.Unlocked, DisplayOn: true } && !SessionPolicy.TurnedOff(_config, _situation).Strip;
+            }
+        }
+    }
+
+    /// <summary>Everything off (tray, hotkey) or back to the profile. Takes effect on the next <see cref="Render"/>.</summary>
+    public void SetAllOff(bool off)
+    {
+        lock (_gate)
+        {
+            if (_allOff != off)
+            {
+                _allOff = off;
+                _rebuild = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows the strip identification pattern instead of the profile (SPEC 7.5): the first 3 LEDs green, the last 3
+    /// red and every 10th LED white, so the start, the direction and the corners can be read off the strip.
+    /// </summary>
+    public void SetStripTest(bool on)
+    {
+        lock (_gate)
+        {
+            if (_stripTest != on)
+            {
+                _stripTest = on;
+                _rebuild = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether the Agent delivers screen colors. While false a strip in Screen mode shows the profile's fallback.
+    /// Takes effect on the next <see cref="Render"/>.
+    /// </summary>
+    public void SetScreenFeed(bool live)
+    {
+        lock (_gate)
+        {
+            if (_screenLive != live)
+            {
+                _screenLive = live;
+                _rebuild = true;
+            }
+        }
+    }
+
+    /// <summary>New screen colors from the Agent, in strip LED order before brightness. Does not allocate.</summary>
+    /// <returns>True when the strip shows the screen and a render is due.</returns>
+    public bool PushScreenFrame(ReadOnlySpan<RgbColor> colors)
+    {
+        lock (_gate)
+        {
+            var count = Math.Min(colors.Length, _screen.Length);
+            colors[..count].CopyTo(_screen);
+            if (_screenTarget is null)
+            {
+                return false;
+            }
+
+            _screenTarget.Dirty = true;
+            return true;
+        }
     }
 
     public LightingConfig Config
@@ -71,6 +163,38 @@ public sealed class LightingEngine
             {
                 return _config;
             }
+        }
+    }
+
+    /// <summary>OpenRGB devices of the last enumeration (empty while detached).</summary>
+    public IReadOnlyList<ControllerData> Devices
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _devices;
+            }
+        }
+    }
+
+    /// <summary>
+    /// New strip layout (layout wizard, config edit). A layout for a different LED count is ignored; the LED count
+    /// changes only with a Service restart. Takes effect on the next <see cref="Render"/>.
+    /// </summary>
+    public void SetStripLayout(StripLayout layout)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        if (layout.LedCount != _stripLedCount)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _stripPoints = layout.ToPoints();
+            _stripRuns = layout.LitRuns();
+            _rebuild = true;
         }
     }
 
@@ -158,6 +282,7 @@ public sealed class LightingEngine
             if (_rebuild)
             {
                 _rebuild = false;
+                _screenTarget = null;
                 _targets = Build(now);
             }
 
@@ -251,8 +376,9 @@ public sealed class LightingEngine
     {
         var config = _config;
         var profileName = SessionPolicy.ProfileFor(config, _situation.Session);
-        var profile = _blackout ? BlackoutProfile : config.FindProfile(profileName) ?? new ProfileConfig { Name = "(none)" };
-        if (!_blackout && !string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase))
+        var dark = _blackout || _allOff;
+        var profile = dark ? BlackoutProfile : config.FindProfile(profileName) ?? new ProfileConfig { Name = "(none)" };
+        if (!dark && !string.Equals(profile.Name, profileName, StringComparison.OrdinalIgnoreCase))
         {
             _log.Warning("Profile {Profile} does not exist; everything stays off", profileName);
         }
@@ -268,7 +394,7 @@ public sealed class LightingEngine
         var targets = new List<Target>(_devices.Count + 1);
         if (_stripLedCount > 0)
         {
-            targets.Add(BuildStrip(profile, config, off.Strip, now));
+            targets.Add(_stripTest && !_blackout ? BuildStripTest(now) : BuildStrip(profile, config, off.Strip, now));
         }
 
         for (var index = 0; index < _devices.Count; index++)
@@ -278,7 +404,7 @@ public sealed class LightingEngine
         }
 
         _log.Information("Rendering profile {Profile} ({Situation:l}): {Targets}", profile.Name,
-            _blackout ? "blackout" : _situation.ToString(),
+            _blackout ? "blackout" : _allOff ? "all off" : _situation.ToString(),
             string.Join("; ", targets.Select(t => t.Describe())));
         return [.. targets];
     }
@@ -286,10 +412,12 @@ public sealed class LightingEngine
     private Target BuildStrip(ProfileConfig profile, LightingConfig config, bool turnedOff, TimeSpan now)
     {
         var ambilight = profile.Ambilight;
-        // Screen mode needs the Agent's capture (stage 4); until a frame source exists the fallback is shown.
-        var mode = turnedOff ? AmbilightMode.Off : ambilight.Mode == AmbilightMode.Screen ? ambilight.Fallback : ambilight.Mode;
+        // Screen mode needs the Agent's capture, which exists only in an unlocked session with the display on.
+        var screen = _screenLive && _situation is { Session: SessionKind.Unlocked, DisplayOn: true };
+        var mode = turnedOff ? AmbilightMode.Off : ambilight.Mode == AmbilightMode.Screen && !screen ? ambilight.Fallback : ambilight.Mode;
         Effect effect = mode switch
         {
+            AmbilightMode.Screen => new ScreenFeedEffect(_screen),
             AmbilightMode.Radial => new RadialEffect(
                 Palette.Resolve(ambilight.Palette, config.Palettes) ?? Palette.Solid(new RgbColor(255, 255, 255)),
                 RadialMode.Rotate, reverse: false, scale: 1, ambilight.Speed),
@@ -298,9 +426,34 @@ public sealed class LightingEngine
             _ => OffEffect.Instance,
         };
         var brightness = mode == AmbilightMode.Solid ? ambilight.SolidBrightnessPercent : ambilight.BrightnessPercent;
-        var points = LedLayoutBuilder.Ring(_stripLedCount);
-        var bindings = new[] { new Binding(0, _stripLedCount, effect, Brightness(brightness, profile.MasterBrightnessPercent)) };
-        return new Target(Target.Strip, $"strip {mode}", points, bindings, _stripMaxFps, now);
+        var level = Brightness(brightness, profile.MasterBrightnessPercent);
+
+        // The Agent already sends black for dark LEDs; the effects leave the LEDs outside the lit runs untouched (black).
+        Binding[] bindings = mode == AmbilightMode.Screen
+            ? [new Binding(0, _stripLedCount, effect, level)]
+            : [.. _stripRuns.Select(run => new Binding(run.Start, run.Count, effect, level))];
+        var target = new Target(Target.Strip, $"strip {mode}", _stripPoints, bindings, _stripMaxFps, now);
+        if (mode == AmbilightMode.Screen)
+        {
+            _screenTarget = target;
+        }
+
+        return target;
+    }
+
+    private Target BuildStripTest(TimeSpan now)
+    {
+        var pattern = new RgbColor[_stripLedCount];
+        for (var i = 0; i < pattern.Length; i++)
+        {
+            pattern[i] = i < 3 ? new RgbColor(0, 255, 0)
+                : i >= pattern.Length - 3 ? new RgbColor(255, 0, 0)
+                : i % 10 == 0 ? new RgbColor(255, 255, 255)
+                : default;
+        }
+
+        Binding[] bindings = [new Binding(0, _stripLedCount, new ScreenFeedEffect(pattern), Brightness(50, 100))];
+        return new Target(Target.Strip, "strip test pattern", _stripPoints, bindings, _stripMaxFps, now);
     }
 
     private Target BuildDevice(
@@ -389,6 +542,15 @@ public sealed class LightingEngine
     /// <summary>Group percent x master percent as a 0-255 factor; 100% x 100% is 255 (full diode power).</summary>
     private static int Brightness(int percent, int masterPercent) =>
         (int)Math.Round(Math.Clamp(percent, 0, 100) * Math.Clamp(masterPercent, 0, 100) * 255 / 10_000.0);
+
+    /// <summary>Copies the latest screen colors from the Agent; renders only when a new frame marks the strip dirty.</summary>
+    private sealed class ScreenFeedEffect(RgbColor[] screen) : Effect
+    {
+        public override bool IsAnimated => false;
+
+        public override void Render(ReadOnlySpan<LedPoint> points, Span<RgbColor> destination, double seconds) =>
+            screen.AsSpan(0, destination.Length).CopyTo(destination);
+    }
 
     private readonly record struct Binding(int Start, int Count, Effect Effect, int Brightness);
 

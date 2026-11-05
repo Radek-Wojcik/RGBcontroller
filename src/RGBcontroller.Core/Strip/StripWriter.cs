@@ -14,6 +14,9 @@ public interface IStripTransport : IDisposable
 
     /// <summary>Blocks until queued bytes are on the wire (used before closing so the black frame is not lost).</summary>
     void Flush();
+
+    /// <summary>Copies bytes the board sent (its "Ada" handshake) into <paramref name="buffer"/> without waiting; 0 when none.</summary>
+    int ReadAvailable(Span<byte> buffer);
 }
 
 /// <summary>Finds and opens the strip's serial port (by USB VID/PID or an explicit override).</summary>
@@ -38,6 +41,9 @@ public sealed record StripWriterTimings(TimeSpan Settle, TimeSpan KeepAlive, Fun
     public int StartupFrames { get; init; } = 3;
 
     public TimeSpan StartupFrameGap { get; init; } = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>Period over which the board's handshakes are counted against the frames sent.</summary>
+    public TimeSpan WatchdogWindow { get; init; } = TimeSpan.FromSeconds(3);
 
     /// <summary>Reconnect delays 0.5, 1, 2, 5 s, then every 5 s (discovery is a cheap registry lookup).</summary>
     public static TimeSpan DefaultBackoff(int attempt) => attempt switch
@@ -71,7 +77,16 @@ public sealed class StripWriter : IAsyncDisposable
     private readonly SemaphoreSlim _wake = new(0, 1);
     private readonly CancellationTokenSource _stop = new();
     private readonly TimeSpan _minFrameInterval;
+    private readonly int _baudRate;
     private readonly Stopwatch _sinceLastWrite = new();
+    private readonly Stopwatch _watchWindow = new();
+    private readonly byte[] _readBuffer = new byte[256];
+    private int _windowFrames;
+    private int _windowHandshakes;
+    private int _reopenRequested;
+    private string _reopenReason = "";
+    private TaskCompletionSource? _blackRequest;
+    private bool _handshakeLogged;
     private int _brightnessPercent;
     private Task _loop = Task.CompletedTask;
     private long _framesWritten;
@@ -84,13 +99,22 @@ public sealed class StripWriter : IAsyncDisposable
         _timings = timings ?? StripWriterTimings.FromConfig(config);
         _frame = new AdalightFrame(config.LedCount, config.ColorOrder, config.CurrentLimitMilliamps);
         _colors = new RgbColor[config.LedCount];
+        _baudRate = Math.Max(1200, config.BaudRate);
 
         var linkFps = AdalightFrame.MaxFramesPerSecond(config.BaudRate, config.LedCount);
-        EffectiveMaxFps = Math.Max(1, Math.Min(config.MaxFps, (int)Math.Floor(linkFps * 0.95)));
+        EffectiveMaxFps = Math.Max(1, Math.Min(config.MaxFps, (int)Math.Floor(linkFps * LinkShare)));
         _minFrameInterval = TimeSpan.FromSeconds(1.0 / EffectiveMaxFps);
     }
 
-    /// <summary>Configured FPS clamped to 95% of what the serial link can carry.</summary>
+    /// <summary>
+    /// Share of the serial link the frames may use. The board drops incoming bytes while it clocks the LEDs out (about
+    /// 4 ms for 133 LEDs); at 95% the gap between frames was 2 ms, the link was busy all the time once Screen mode
+    /// captured at 30 FPS, and the LED BOX locked up with the LEDs latched (2026-11-05, frozen white, no handshakes).
+    /// 75% leaves about 9 ms between frames (20 FPS for 133 LEDs).
+    /// </summary>
+    public const double LinkShare = 0.75;
+
+    /// <summary>Configured FPS clamped to <see cref="LinkShare"/> of what the serial link can carry.</summary>
     public int EffectiveMaxFps { get; }
 
     public StripState State { get; private set; } = StripState.Stopped;
@@ -133,6 +157,44 @@ public sealed class StripWriter : IAsyncDisposable
             _brightnessPercent = brightnessPercent;
         }
 
+        Wake();
+    }
+
+    /// <summary>
+    /// Sets the strip to black and waits until the black frames have left the port (suspend). <see cref="SetAll"/> only
+    /// hands colors to the writer thread; before sleep that was too late: Windows suspended 48 ms after the display
+    /// went off, the black never left, and the LED BOX (own 5 V supply) kept showing its last frame all night.
+    /// </summary>
+    /// <returns>False when the strip is not connected or the frames did not go out within <paramref name="timeout"/>.</returns>
+    public bool WriteBlackNow(TimeSpan timeout)
+    {
+        if (State != StripState.Connected)
+        {
+            return false;
+        }
+
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_colorsLock)
+        {
+            _colors.AsSpan().Clear();
+            _brightnessPercent = 0;
+            _blackRequest?.TrySetResult();
+            _blackRequest = done;
+        }
+
+        Wake();
+        return done.Task.Wait(timeout);
+    }
+
+    /// <summary>
+    /// Closes and reopens the port with a fresh handle (spike R6: after resume the CH340 may keep its COM name while
+    /// the old handle no longer reaches the board, so the strip froze on its last frame while writes still
+    /// "succeeded"). Opening the port also pulses DTR, which resets the board.
+    /// </summary>
+    public void Reopen(string reason)
+    {
+        _reopenReason = reason;
+        Interlocked.Exchange(ref _reopenRequested, 1);
         Wake();
     }
 
@@ -196,9 +258,25 @@ public sealed class StripWriter : IAsyncDisposable
 
                     SetState(StripState.Connected, port);
                     attempt = 0;
-                    while (true)
+                    Interlocked.Exchange(ref _reopenRequested, 0);
+                    _handshakeLogged = false;
+                    ResetWatchdog();
+                    while (Interlocked.Exchange(ref _reopenRequested, 0) == 0)
                     {
                         await _wake.WaitAsync(_timings.KeepAlive, token).ConfigureAwait(false);
+                        if (Volatile.Read(ref _reopenRequested) == 1)
+                        {
+                            continue;
+                        }
+
+                        if (TakeBlackRequest() is { } black)
+                        {
+                            WriteBlackFrames(transport);
+                            Drain(transport);
+                            black.TrySetResult();
+                            continue;
+                        }
+
                         var wait = _minFrameInterval - _sinceLastWrite.Elapsed;
                         if (wait > TimeSpan.Zero)
                         {
@@ -206,7 +284,13 @@ public sealed class StripWriter : IAsyncDisposable
                         }
 
                         WriteCurrent(transport);
+                        Watch(transport);
                     }
+
+                    _log.Information("Reopening the strip port {Port:l} ({Reason})", port, _reopenReason);
+                    transport.Dispose();
+                    transport = null;
+                    SetState(StripState.Searching, null);
                 }
                 catch (Exception ex) when (ex is IOException or TimeoutException or UnauthorizedAccessException or InvalidOperationException)
                 {
@@ -246,18 +330,88 @@ public sealed class StripWriter : IAsyncDisposable
         Interlocked.Increment(ref _framesWritten);
     }
 
+    private TaskCompletionSource? TakeBlackRequest()
+    {
+        lock (_colorsLock)
+        {
+            var request = _blackRequest;
+            _blackRequest = null;
+            return request;
+        }
+    }
+
+    /// <summary>
+    /// Waits until the black frames are on the wire, not just handed to the driver: the CH340 driver returns from Flush
+    /// at once and closing the port drops what is still queued, so at every shutdown the port closed 20 ms after the
+    /// black frames although they need about 105 ms at 115200 baud, and the strip stayed lit.
+    /// </summary>
+    private void Drain(IStripTransport transport)
+    {
+        transport.Flush();
+        var bytes = _frame.Bytes.Length * _timings.StartupFrames;
+        Thread.Sleep(TimeSpan.FromSeconds(bytes * 10.0 / _baudRate) + TimeSpan.FromMilliseconds(30));
+    }
+
+    private void WriteBlackFrames(IStripTransport transport)
+    {
+        _frame.Render([], 0);
+        for (var i = 0; i < _timings.StartupFrames; i++)
+        {
+            transport.Write(_frame.Bytes);
+            Interlocked.Increment(ref _framesWritten);
+        }
+
+        _sinceLastWrite.Restart();
+    }
+
+    private void ResetWatchdog()
+    {
+        _windowFrames = 0;
+        _windowHandshakes = 0;
+        _watchWindow.Restart();
+    }
+
+    /// <summary>
+    /// The firmware sends "Ada" about once a second only while it receives no frames. Handshakes during a steady flow of
+    /// frames (an animation, not the 1 s keep-alive) mean the board does not take them: reopen the port.
+    /// </summary>
+    private void Watch(IStripTransport transport)
+    {
+        _windowFrames++;
+        var read = transport.ReadAvailable(_readBuffer);
+        if (read > 0 && _readBuffer.AsSpan(0, read).IndexOf("Ada"u8) >= 0)
+        {
+            _windowHandshakes++;
+            if (!_handshakeLogged)
+            {
+                // Diagnostics: the board says "Ada" only while it receives no frames.
+                _handshakeLogged = true;
+                _log.Information("The strip board sent a handshake while connected ({Frames} frames written so far)", FramesWritten);
+            }
+        }
+
+        if (_watchWindow.Elapsed < _timings.WatchdogWindow)
+        {
+            return;
+        }
+
+        var framesPerSecond = _windowFrames / _watchWindow.Elapsed.TotalSeconds;
+        if (_windowHandshakes >= 2 && framesPerSecond >= 5)
+        {
+            _log.Warning("The strip board asked for a handshake {Count} times while receiving {Fps:0} frames per second; it is not taking frames",
+                _windowHandshakes, framesPerSecond);
+            Reopen("the board stopped taking frames");
+        }
+
+        ResetWatchdog();
+    }
+
     private void WriteBlackAndClose(IStripTransport transport)
     {
         try
         {
-            _frame.Render([], 0);
-            for (var i = 0; i < _timings.StartupFrames; i++)
-            {
-                transport.Write(_frame.Bytes);
-                Interlocked.Increment(ref _framesWritten);
-            }
-
-            transport.Flush();
+            WriteBlackFrames(transport);
+            Drain(transport);
             _log.Information("Strip on {Port} set to black", transport.PortName);
         }
         catch (Exception ex) when (ex is IOException or TimeoutException or UnauthorizedAccessException or InvalidOperationException)

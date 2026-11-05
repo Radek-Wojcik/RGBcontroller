@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\src\RGBcontroller.Core\RGBcontroller.Core.csproj" />
     <ProjectReference Include="..\..\src\RGBcontroller.Ipc\RGBcontroller.Ipc.csproj" />
     <ProjectReference Include="..\..\src\RGBcontroller.Service\RGBcontroller.Service.csproj" />
+    <ProjectReference Include="..\..\src\RGBcontroller.UI\RGBcontroller.UI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

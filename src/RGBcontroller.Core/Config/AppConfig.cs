@@ -19,6 +19,11 @@ public sealed record AppConfig
 
     public LightingConfig Lighting { get; set; } = new();
 
+    /// <summary>Screen mode pipeline of the Agent (SPEC 6.2).</summary>
+    public ScreenCaptureConfig Capture { get; set; } = new();
+
+    public HotkeysConfig Hotkeys { get; set; } = new();
+
     public LoggingConfig Logging { get; set; } = new();
 
     public static AppConfig CreateDefault() => new();
@@ -53,6 +58,9 @@ public sealed record StripConfig
 
     /// <summary>A static frame is re-sent at this interval so the strip never depends on firmware idle behaviour.</summary>
     public int KeepAliveMilliseconds { get; set; } = 1000;
+
+    /// <summary>Position of every LED around the monitor (screen sampling and the radial fallback).</summary>
+    public StripLayoutConfig Layout { get; set; } = new();
 }
 
 /// <summary>The supervised, pinned OpenRGB instance.</summary>

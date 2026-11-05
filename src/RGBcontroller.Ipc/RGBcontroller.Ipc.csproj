@@ -8,4 +8,9 @@
     <PackageReference Include="StreamJsonRpc" />
   </ItemGroup>
 
+  <!-- Config records (strip layout, capture, hotkeys) travel to the Agent as they are. -->
+  <ItemGroup>
+    <ProjectReference Include="..\RGBcontroller.Core\RGBcontroller.Core.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -1,4 +1,5 @@
 using Nerdbank.Streams;
+using RGBcontroller.Core.Config;
 using RGBcontroller.Ipc;
 
 namespace RGBcontroller.Tests.Ipc;
@@ -54,6 +55,59 @@ public sealed class IpcContractTests
 
         Assert.Equal(VersionCompatibility.ServerTooOld, hello.Compatibility);
         Assert.NotNull(hello.Message);
+    }
+
+    private static readonly AgentSettings Settings = new(
+        60,
+        new StripLayoutConfig { StartCorner = StripCorner.TopRight, Clockwise = false, Top = 20, Gaps = [3, 4] },
+        new ScreenCaptureConfig { Monitor = @"\\.\DISPLAY2", Gamma = 1.8, LetterboxDetection = false },
+        new HotkeysConfig { Bindings = [new("Alt+P", HotkeyAction.Profile, "Night")], BrightnessStepPercent = 5 });
+
+    [Fact]
+    public async Task JsonRpc_CarriesAgentSettingsAndStateUnchanged()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (clientStream, serverStream) = FullDuplexStream.CreatePair();
+        using var server = IpcRpc.CreateConnection(serverStream);
+        server.AddLocalRpcTarget<IServiceControl>(new FakeService(IpcProtocol.Current), null);
+        server.StartListening();
+        using var client = IpcRpc.CreateConnection(clientStream);
+        var proxy = client.Attach<IServiceControl>();
+        client.StartListening();
+
+        Assert.Equal(Settings, await proxy.GetAgentSettingsAsync(ct));
+        var state = await proxy.SubscribeAsync(ct);
+        Assert.Equal(AmbilightMode.Solid, state.StripMode);
+        Assert.Equal(["Rainbow"], state.Profiles);
+        var change = await proxy.ChangeStripAsync(new StripChangeRequest(ToggleSolid: true), ct);
+        Assert.Equal(new StripChangeRequest(ToggleSolid: true).ToString(), change.Message);
+    }
+
+    private static readonly AppConfig FullConfig = AppConfig.CreateDefault() with
+    {
+        Strip = new StripConfig { LedCount = 133, PortName = "COM7", Layout = new StripLayoutConfig { Offset = 9, Gaps = [1, 2] } },
+        Capture = new ScreenCaptureConfig { CaptureFps = 25, Monitor = @"\.\DISPLAY2" },
+    };
+
+    [Fact]
+    public async Task JsonRpc_CarriesTheWholeConfigUnchanged()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (clientStream, serverStream) = FullDuplexStream.CreatePair();
+        using var server = IpcRpc.CreateConnection(serverStream);
+        server.AddLocalRpcTarget<IServiceControl>(new FakeService(IpcProtocol.Current), null);
+        server.StartListening();
+        using var client = IpcRpc.CreateConnection(clientStream);
+        var proxy = client.Attach<IServiceControl>();
+        client.StartListening();
+
+        var snapshot = await proxy.GetConfigAsync(ct);
+        Assert.Equal(7, snapshot.Revision);
+        Assert.Equal(FullConfig, snapshot.Config);
+        var update = await proxy.UpdateConfigAsync(new ConfigUpdateRequest(snapshot.Revision, snapshot.Config), ct);
+        Assert.True(update.Success);
+        var devices = await proxy.GetDevicesAsync(ct);
+        Assert.Equal(132, devices.Devices[0].Zones[0].LedCount);
     }
 
     [Fact]
@@ -112,5 +166,30 @@ public sealed class IpcContractTests
 
         public Task<CommandResult> TuneGroupAsync(GroupTuningRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new CommandResult(true, null));
+
+        public Task<AgentState> SubscribeAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new AgentState(7, new ServiceStatus(ComponentState.Ok, ComponentState.Ok, null), ["Rainbow"], "Rainbow", "Rainbow",
+                AmbilightMode.Solid, 40, CaptureWanted: false, AllOff: false));
+
+        public Task<AgentSettings> GetAgentSettingsAsync(CancellationToken cancellationToken) => Task.FromResult(Settings);
+
+        public Task<CommandResult> ChangeStripAsync(StripChangeRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new CommandResult(true, request.ToString()));
+
+        public Task<CommandResult> SetAllOffAsync(bool off, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(off, null));
+
+        public Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public Task<ConfigSnapshot> GetConfigAsync(CancellationToken cancellationToken) => Task.FromResult(new ConfigSnapshot(7, FullConfig));
+
+        public Task<ConfigUpdateResult> UpdateConfigAsync(ConfigUpdateRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new ConfigUpdateResult(request.Config == FullConfig, null, request.ExpectedRevision + 1, [], false));
+
+        public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(new StripColors([1, 2, 3]));
+
+        public Task<DeviceList> GetDevicesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new DeviceList([new DeviceInfo(0, "Keyboard", 5, [new ZoneInfo("Keys", 2, 132, false, 22, 6)])], 133));
     }
 }

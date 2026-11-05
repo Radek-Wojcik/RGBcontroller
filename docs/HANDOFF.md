@@ -1,8 +1,8 @@
 # RGBcontroller: project state and handoff
 
-Last updated: 2026-11-01 evening, after the stage 3 gate. **Read this file right after
+Last updated: 2026-11-04, stage 4 gate partly run and its fixes installed; stage 5 started on branch `stage-5-ui`. **Read this file right after
 `SPEC.md` and `CLAUDE.md` when you start a new session.** It records everything that was built, decided and learned
-in stages 0-3, the exact state of
+in stages 0-4, the exact state of
 the owner's PC, and what to do next. `SPEC.md` stays the source of truth for requirements. This file is the source
 of truth for **what exists now**.
 
@@ -16,10 +16,17 @@ of truth for **what exists now**.
 | 1. Service + OpenRGB supervisor + Adalight | **Passed** (2026-10-31) | `v0.1.0-stage1` | `docs/spikes/R1-R5-R6-stage1.md` |
 | 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
 | 3. Power, session, display | **Passed** (2026-11-01; owner waived the remaining 7 sleep and 3 hibernate cycles) | `v0.3.0-stage3` | `docs/spikes/stage3-power.md` |
-| 4-6 | Not started | | |
+| 4. Agent, tray, hotkeys, ambilight | **Gate partly run** (2026-11-04): tests 1, 2, 5 passed, 6 (HDR) skipped by the owner, 3, 4, 7, 8, 9 to repeat on the fixed build | | `docs/spikes/stage4-agent.md` |
+| 5. UI | **In progress** on `stage-5-ui`: IPC 1.4, WebView2 shell, React front end with six pages; next: live preview, identify API, wizards | | `docs/spikes/stage5-ui-plan.md` |
+| 6 | Not started | | |
 
 What works today on the owner's PC:
-- The installed build is tag `v0.3.0-stage3` (`--status` reports 0.3.0).
+- The installed build is branch `stage-5-ui` at commit b12dbb4 (`--status` reports 0.3.0, IPC 1.4): stage 4 fixes,
+  the UI with the React front end, and the USB hot-plug rescan. Versions are bumped when the gates pass.
+- **Stage 4:** the Agent runs in the tray (started at logon from HKCU Run), mirrors the screen to the strip (Screen
+  mode) while the session is unlocked and the display is on, and has hotkeys Ctrl+F9 (solid toggle), Ctrl+F10 (cycle
+  strip mode), Ctrl+F11/F12 (strip brightness -/+). The strip is now **133 LEDs on COM7** in the owner's layout
+  (confirmed with `--strip-test`).
 - The Windows Service `RGBcontroller` (LocalSystem, automatic start) lights the strip and all 5 OpenRGB devices
   before the logon screen.
 - Session and display policy (SPEC 4): Logon profile on the logon screen, active profile when unlocked, Lock
@@ -42,6 +49,7 @@ Repository: <https://github.com/Radek-Wojcik/RGBcontroller> (**private**, no LIC
   pushed, with tag `v0.3.0-stage3`.
 - The stage branches are merged and can be deleted.
 - The README describes stages 1-3 (refreshed through PR #2).
+- `stage-4-agent` is pushed to origin so the owner can continue elsewhere; merge it after the stage 4 gate.
 
 ---
 
@@ -94,11 +102,13 @@ These come from the owner during stages 0-3 and add to `CLAUDE.md`:
 | Razer Synapse 3, Logitech G HUB, AmbiBox | Installed; their autostart is disabled (StartupApproved). **The owner wants them kept.** The `Razer Chroma SDK Server` service runs (it only talks to the Razer keyboard). AmbiBox must never run (it would take COM3). | n/a |
 | .NET 10 SDK 10.0.403 | User-local in `%LOCALAPPDATA%\Microsoft\dotnet`. The machine-wide install has runtimes only. | Delete the folder |
 | GitHub CLI 2.103.3 | `C:\Program Files\GitHub CLI\gh.exe` (winget). Logged in as `Radek-Wojcik` (keyring); git uses it for HTTPS. **It is not on PATH in an old shell:** prepend `C:\Program Files\GitHub CLI`. | `winget uninstall GitHub.cli` |
-| Node.js | **Not installed** (needed in stage 5 for the React front end). | n/a |
+| Node.js | **Portable Node 24.22.2 LTS in `%USERPROFILE%\.tools\nodejs`** (2026-11-04, owner's OK, SHA-256 checked against nodejs.org SHASUMS256.txt). Not on PATH; `tools\Build-Frontend.ps1` finds it. Not in `%LOCALAPPDATA%` because writes there from Claude's shell land in the MSIX LocalCache (lesson 19). | Delete the folder |
 | Fast Startup | Off (`HiberbootEnabled = 0`), so "Shut down" is a cold boot. | n/a |
 | PawnIO driver | Present (`PawnIO`, manual start, running). | n/a |
-| `config.json` | Schema 2 (migrated; `config.v1.bak.json` next to it). Active profile Rainbow; the RAM group is tuned to 10 FPS, and Rainbow's RAM effect to speed 0.08, scale 0.3. | Edit it, or use `--group` / `--profile` |
-| Adalight CH340 | **Drops off USB intermittently** (no VID_1A86 device in Windows at all); the owner was asked to check the cable and port. | n/a |
+| `config.json` | Schema 2 (migrated; `config.v1.bak.json` next to it). Active profile Rainbow; the RAM group is tuned to 10 FPS, and Rainbow's RAM effect to speed 0.08, scale 0.3. Stage 4: `strip.ledCount` 133 and `strip.layout` = BottomLeft, clockwise, left 23, top 41, right 23, bottom 43, offset 9 (the strip starts mid-height on the left edge going up and ends with a 3 LED overlap). The previous file is `config.before-stage4.json`. | Edit it, or use `--group` / `--profile` |
+| Agent autostart | HKCU `Software\Microsoft\Windows\CurrentVersion\Run` value `RGBcontroller.Agent` = `"C:\Program Files\RGBcontroller\RGBcontroller.Agent.exe"`. Agent logs: `%LOCALAPPDATA%\RGBcontroller\logs\agent-YYYYMMDD.log`. | `uninstall-dev.ps1` removes it |
+| Adalight strip | **New strip mounted 2026-11-01: 133 LEDs**, the CH340 now enumerates as **COM7** (found by VID/PID, no config change needed). |  n/a |
+| Adalight CH340 (old note) | **Drops off USB intermittently** (no VID_1A86 device in Windows at all); the owner was asked to check the cable and port. | n/a |
 
 Hardware facts confirmed live (in addition to SPEC section 2):
 - The keyboard has **132 LEDs in a 6x22 matrix**, not the 104-key 6x21 layout that SPEC assumed.
@@ -254,7 +264,34 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
   before the sleep (O4).
 - `StripWriter`: open failures now name the port (was `port null`).
 
-### `tests/RGBcontroller.Tests` (xUnit v3, 165 tests, all green)
+### Stage 4 additions (branch `stage-4-agent`)
+- `Core/Config/AmbilightSettings.cs`: `strip.layout` (`StripLayoutConfig`: start corner, clockwise, LEDs per edge,
+  offset, gaps; LEDs past the path wrap around the loop = overlap), `capture` (`ScreenCaptureConfig`, every SPEC 6.2
+  parameter) and `hotkeys` (`HotkeysConfig`). New sections with defaults, schema stays 2. `ConfigValidator.Agent.cs`.
+- `Core/Hotkeys/HotkeyGesture`: "Ctrl+F9" parser to RegisterHotKey modifier and virtual key.
+- `Core/Ambilight`: `StripLayout` (placement per LED), `EdgeSampler` (band per LED with overlap, stride-limited),
+  `LetterboxDetector` (outer-quarter rows, symmetric bars, 1.5 s hysteresis, dark frames keep the result),
+  `AmbilightPipeline` (black threshold + soft knee, gamma 2.0, saturation, attack 80 / release 300 / black release
+  60 ms, snap to 0), `ScreenImage`/`ColorMath` (BGRA8 and scRGB FP16, HDR tone map with the SDR white level).
+- `Core/Lighting/LightingEngine`: strip points from the layout; `SetScreenFeed`, `PushScreenFrame` (no allocation),
+  `SetAllOff`, `SetStripTest`, `IsScreenWanted` (Screen mode, unlocked, display on, nothing off).
+- IPC 1.3 (`Ipc` now references `Core`): `SubscribeAsync` + `IServiceEvents.StateChanged` notifications
+  (`AgentState` with a sequence number), `GetAgentSettingsAsync`, `ChangeStripAsync` (mode, brightness, delta,
+  toggle solid, cycle), `SetAllOffAsync` (runtime only), `StepProfileAsync`, `ShowStripTestAsync`; frame type
+  `CaptureUnavailable`.
+- Service: `Ipc/FrameServer` (frame pipe, only the console session's Agent drives the strip, newest wins, malformed
+  frames close the connection), `Ipc/ServicePipes` (shared pipe ACL, client session id), per-connection
+  endpoints and `Broadcast` in `ControlServer`, `LightingHost` agent operations (strip changes saved 2 s after the
+  last one, mode before Solid remembered in memory), `--strip-test [seconds]` CLI.
+- Agent: `Capture/DesktopDuplicator` (DXGI duplication, GPU mip downscale to about 480 px, non-blocking map),
+  `Capture/DisplayInfo` (EDID width, SDR white level), `Capture/ScreenCaptureLoop` (capture <= 20 FPS, output <= 30
+  FPS, idle blocking in AcquireNextFrame, 1.5 s grace then fallback), `Capture/CaptureProbe` (`--capture-probe`),
+  `ServiceConnection` (control + frame pipes, back-off reconnect), `HotkeyWindow`, `Tray/*` (dark menu, owner-drawn
+  brightness slider, drawn ring icons), `AgentApplication`.
+- `install-dev.ps1` publishes Service and Agent into one folder, registers the HKCU Run value and starts the Agent
+  through `explorer.exe` (unelevated); `uninstall-dev.ps1` stops it and removes the value.
+
+### `tests/RGBcontroller.Tests` (xUnit v3, 198 tests after stage 4, all green)
 - `FakeOpenRgbServer` is a loopback TCP stand-in for OpenRGB 1.0rc2:
   - It enforces the size checks for UPDATELEDS and UPDATEMODE, records LED colors, mode and resize requests, and pushes DEVICE_LIST_UPDATED.
   - It has switches for an unresponsive server and for dropping clients.
@@ -266,10 +303,21 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
   - the SDK client;
   - the supervisor: crash restart, hung SDK, startup timeout, rescan re-apply, zone resize, black on stop, uptime wait.
 
+### Stage 5 additions (branch `stage-5-ui`)
+- IPC 1.4: `GetConfigAsync`, `UpdateConfigAsync` (revision check, validation, OpenRGB executable path protected,
+  `RestartRequired`), `GetDevicesAsync`; `AgentState.SettingsRevision` and `ConfigRevision`.
+- `LightingEngine.SetStripLayout` (layout edits apply live); the Agent reloads its settings on a new settings revision.
+- `RGBcontroller.UI`: WPF + WebView2 (`ui.rgbcontroller.example` mapped to `wwwroot`, or `fallback\` without a built
+  front end), `Bridge` (fixed method list), `ServiceClient`, single instance, dark title bar.
+- `ui/`: React 19 + TypeScript 7 + Vite 8, exact versions. Pages Dashboard, Devices, Ambilight, Profiles, Hotkeys,
+  Settings. `npm run dev` (or the `ui-dev` entry of `.claude/launch.json`, git-ignored) runs on stand-in data from
+  `src/mock-config.json`; production builds drop it. `src/strip.ts` ports `StripLayout` (keep both in step).
+
 ### Scripts
 | Script | Purpose |
 |---|---|
-| `build.ps1 [-Test] [-Configuration Release]` | Build (warnings as errors) and run tests through `dotnet test --solution` (MTP). Finds the user-local SDK. |
+| `build.ps1 [-Test] [-Configuration Release] [-SkipFrontend]` | Front end (`tools\Build-Frontend.ps1`), then the solution (warnings as errors) and tests through `dotnet test --solution` (MTP); `-Test` also runs the Vitest tests. Finds the user-local SDK. |
+| `tools/Build-Frontend.ps1 [-Test]` | `npm ci` when needed and `npm run build` in `ui/`; skipped with a warning when Node.js is missing. |
 | `tools/Get-PinnedOpenRgb.ps1` | Copies `C:\Program Files\OpenRGB` to `third_party/openrgb` (git-ignored) **without `plugins`**, after checking the SHA-256 in `third_party/openrgb-pin.json`. |
 | `install-dev.ps1` | Elevated. Steps: publish (self-contained, ReadyToRun, `--disable-build-servers`), take ownership of the data folder and set its ACL (folder only, children reset to inherit), record the `OpenRGB_Admin` state and disable it, stop old processes, copy to Program Files with robocopy `/MIR`, register the service with recovery actions, start it, show the log tail. Idempotent; re-run it to update the installed build. |
 | `uninstall-dev.ps1 [-RemoveData]` | Elevated. Stop the service (black), delete it, remove Program Files, restore and start `OpenRGB_Admin`. |
@@ -329,6 +377,50 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
     re-sent 5 s and 30 s after every attach.
 17. **AmbiBox grabs COM3 if someone starts it** (`Access to the path 'COM3' is denied` in the log). The Service
     keeps retrying and takes the port back when AmbiBox lets go; close AmbiBox.
+18. **Stage 4 / spike R7:** Vortice 3.8.3 `DuplicateOutput1` crashes (access violation), so it is called through
+    the vtable; a blocking `Map` spins about 2 ms CPU per frame in the NVIDIA driver, so it is mapped with
+    DO_NOT_WAIT plus 0.5 ms high-resolution sleeps (Agent 0.18% -> 0.05% with a constantly changing desktop). UAC
+    secure desktop: duplication lost, recreated after 2.3 s.
+19. **The Claude desktop app is MSIX:** processes started from Claude's shell write `%LOCALAPPDATA%` into
+    `...\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\...`, and the shell reads that copy first. Start the Agent
+    through `explorer.exe` and delete that LocalCache `RGBcontroller` folder if Agent logs look stale.
+20. **Stage 4 CPU (60 s, mostly still desktop):** Agent 0.004%, Service 0.001%; OpenRGB 1.6% is the RAM at 10 FPS.
+21. **Stage 4 gate findings (2026-11-04):**
+    - The reported "hang" at 14:52 was not a deadlock. The owner pressed Ctrl+F9/F10 quickly and the strip ended in
+      **Off**; the brightness hotkeys and the tray slider then changed the brightness of a dark strip. Fixed:
+      raising the brightness of an Off strip turns it back on in its previous mode (`LightingHost.NextStripMode`).
+    - "Exit Agent" crashed with ObjectDisposedException: WinForms disposes the ApplicationContext and Program's
+      `using` disposed it again. Dispose is idempotent now.
+    - In games `Map` with DO_NOT_WAIT gave up after 100 retries and threw WAS_STILL_DRAWING, which re-created the
+      duplication about 1200 times in one evening. Now it falls back to the blocking map, and WAS_STILL_DRAWING is a
+      skipped frame.
+    - The owner found the strip lagging in action films: capture 20 -> 30 FPS, attack 80 -> 40 ms, release
+      300 -> 120 ms, plus an explicit 800 ms fade-in when Screen mode starts (the owner likes the soft start).
+    - Strip brightness defaults to 100% (owner wish); every profile in the owner's `config.json` was set to 100%.
+22. **USB hot-plug (2026-11-04):** after the monitor hub powered on, the keyboard and mouse came back in factory
+    colors because OpenRGB had rescanned (after resume) before they re-enumerated and nothing rescanned later.
+    `Power/UsbArrivalMonitor` (`CM_Register_Notification`, GUID_DEVINTERFACE_USB_DEVICE, works in Session 0) feeds
+    `OpenRgbSupervisor.NotifyUsbDeviceArrived`: 3 s after the last arrival the single OpenRGB rescans and everything is
+    re-applied. The strip's CH340 is skipped. The owner's report of a "frozen" Agent at the same time was the strip
+    being disconnected: the Agent's message loop ran the whole time.
+23. **"Frozen" strip after resume (2026-11-04 evening), diagnosed with logs, `dotnet-stack` and `dotnet-dump
+    dumpasync` of the Agent (tools in the scratchpad, `dotnet tool install --tool-path`):** no thread or async call
+    hung; every hotkey reached the Service (brightness up at 100% is a no-op and is not logged). After the 19:21
+    resume COM7 kept its name and writes "succeeded" while the strip stayed on its last frame. Fixes:
+    `StripWriter.Reopen` on every resume, a watchdog that reopens the port when the board sends "Ada" handshakes
+    while an animation is being sent, a hotkey OSD in the Agent (`Tray/HotkeyOsd`) so a no-op hotkey is visible,
+    and a 5 s command timeout that drops a dead control link. Also: DPI-aware tray slider label, app icon
+    (`tools/make-icon.py` -> `assets/rgbcontroller.ico`), Desktop and Start menu shortcuts from `install-dev.ps1`.
+    Note: the Service log is buffered, so the newest lines can appear a few seconds late.
+24. **Strip stayed lit through sleep and after shutdown (2026-11-04):** the black never reached the LED BOX, which
+    keeps its last frame on its own 5 V supply. Suspend only handed black to the writer thread (Windows slept 48 ms
+    later); at shutdown the port closed 20 ms after three black frames that need about 105 ms at 115200 baud, and the
+    CH340 driver returns from Flush at once. Fixed in b0c77cc (`StripWriter.WriteBlackNow` on suspend, drain wait
+    on every black write); **not installed yet** (the UAC prompt was cancelled).
+25. **The Service writes every key into `config.json`**, so a changed code default never reaches an existing
+    install. Change the owner's file too (elevated edit with the Service stopped, backup next to it), or add a
+    migration. Backup made on 2026-11-04: `config.before-stage4-fixes.json`.
+
 
 ---
 
@@ -348,27 +440,40 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 | O6 | Owner's remarks, still open: fans "spin up hard / go dark" at power-on (not clarified whether RPM or LEDs); the logon-screen shutdown button needed 3 clicks once (not reproduced, nothing in the logs). | Ask if they come up again |
 | O7 | `third_party/openrgb` needs `tools/Get-PinnedOpenRgb.ps1` on a fresh checkout; a release build should not depend on `C:\Program Files\OpenRGB`. | Stage 6 installer |
 | O8 | The ProgramData `config.json` was written before some keys existed (`minimumUptimeSeconds`); missing keys take the code defaults. Note this when keys are renamed (migration). | Ongoing |
-| O9 | Ambilight Screen mode, Agent, UI and the installer: everything from SPEC stages 4-6. | Stages 4-6 |
+| O9 | UI and the installer: SPEC stages 5-6. | Stages 5-6 |
+| O14 | **Owner wish for the stage 5 strip wizard:** a screen where the owner marks on a drawn monitor outline where the strip starts and ends, where it turns the corners, where there is an overlap, and how many LEDs each run has; universal for any layout. The config model (`StripLayoutConfig`) already covers start corner, direction, counts, offset, overlap (wrap) and gaps. | Stage 5 |
+| O15 | Stage 4 gate 2026-11-04: 1 black screen, 2 dark scenes, 5 game passed; 6 HDR skipped (owner does not use HDR now); 3 (smoothness, letterbox), 4 (CPU), 7 (hotkeys, tray), 8 (sleep), 9 (Win+L) to repeat on the fixed build. | Stage 4 gate |
+| O16 | **Netflix and other DRM video show black** (SPEC 6.2 limitation: protected surfaces never reach Desktop Duplication). The owner wants colors there. No code workaround: the protection is in the OS and GPU. Owner-side option: a browser with hardware acceleration off (Chrome/Edge: Settings, System, "Use graphics acceleration when available"), at the cost of a lower Netflix resolution and more CPU for decoding; the Netflix Store app cannot be captured. | Owner |
+| O17 | **Done**: Node.js installed (section 3). | Done |
+| O18 | **The strip's LED BOX, the keyboard and the mouse are plugged into the monitor's USB hub.** When the monitor is off (its button, or standby) the hub has no power: the CH340 disappears, so no black frame can reach the strip, and the LED BOX (own 5 V supply) keeps lighting on its own. 2026-11-04: the CH340 vanished at 15:39 and came back at 17:09 after wake; the owner saw the strip lit through the sleep while the keyboard and mouse were dark. No software fix. Recommended: plug the LED BOX USB into a USB port of the PC, or keep the monitor's USB powered in standby (OSD setting, if the AG326UD has one). Asked the owner what the strip showed (one color or a pattern) to tell firmware standalone mode from a held frame. | Owner (hardware) |
 
 ---
 
 ## 7. Next steps
 
-1. **Watch for hibernate problems.** The owner closed the stage 3 gate without the remaining 7 sleep and 3
-   hibernate cycles (2026-11-01, "Close it without them"). Confirmed on the hardware and in the logs: lock,
-   locked with the display off, display off while unlocked, logoff to the logon screen, restart and cold boot
-   (all 4 RAM sticks after the re-send fix), 3 sleeps. Hibernate was never exercised; if the owner reports a
-   problem after hibernation, read the log around `Suspending:` / `Resume (` first.
-2. **Stage 3 is closed:** version 0.3.0, merged into `main` (`--no-ff`), tag `v0.3.0-stage3`, pushed, installed.
-   The branch `stage-3-power` can be deleted.
-3. **README refreshed for stages 2 and 3** (PR #2, merged 2026-11-01). Refresh it again after the stage 4 gate.
-4. **Ask the owner:** should the G502 mouse be off (O5)?
-5. **Stage 4** (Agent, tray, hotkeys, ambilight Screen mode, IPC frame pipe, spike R7) on `stage-4-agent`. The
-   strip fallback while locked is already in place (the engine shows the fallback whenever there is no capture).
-   Then stage 5 (UI: speed/scale/FPS per group via `TuneGroupAsync`, the turn-off checkboxes and the Lock profile,
-   O12) and stage 6 (installer).
+**Current (2026-11-04):**
+1. Ask the owner to repeat stage 4 tests 3, 4 (they say "mierz", then measure), 7, 8 and 9 on the installed build.
+2. With the owner's OK: install `stage-5-ui` (`install-dev.ps1`, UAC) so "Open RGBcontroller" in the tray shows the new UI.
+3. Continue stage 5 with `docs/spikes/stage5-ui-plan.md` (front end, preview stream, identify API, wizards).
 
----
+The stage 4 gate list (still valid):
+
+1. **Run the stage 4 gate** with the owner (give the steps in Polish, read logs and measure yourself):
+   1. black screen = strip off (YouTube "black screen" fullscreen);
+   2. dark scenes dark, no tail on fades;
+   3. smooth at 20/30, letterbox film: bands move into the picture after about 1.5 s, subtitles do not disturb;
+   4. CPU with a colorful fullscreen video, 60-70 s, `tools\Measure-RGBcontroller.ps1`: Agent + Service (+ OpenRGB
+      minus its RAM baseline) below 1%;
+   5. borderless game mirrors; exclusive fullscreen mirrors or falls back within about 2 s and returns;
+   6. HDR on (Win+Alt+B): colors not washed out or blown;
+   7. hotkeys Ctrl+F9/F10/F11/F12 and the tray menu (profiles, strip mode, slider, all off);
+   8. sleep and wake: Screen mode back, hotkeys still work;
+   9. Win+L: strip falls back to the rainbow, back to Screen after unlock.
+2. Fix what the gate finds on `stage-4-agent`, re-install with `install-dev.ps1` (elevated, the owner clicks UAC).
+3. After the gate: bump `Directory.Build.props` to 0.4.0, update this file, merge `stage-4-agent` into `main`
+   with `--no-ff`, tag `v0.4.0-stage4`, push, refresh the README through the skill.
+4. Still open from before: should the G502 mouse be off (O5)?
+5. Then stage 5 (UI, including the strip wizard of O14).
 
 ## 8. How to resume in a new session
 
@@ -382,12 +487,12 @@ Polish; code, comments, commits and docs are in English.
 Read, in this order: SPEC.md, CLAUDE.md, docs/HANDOFF.md, then docs/spikes/*.md. HANDOFF.md describes exactly what
 exists, the owner's PC state, binding preferences (commits authored only by the owner with the noreply address, no
 Co-Authored-By/Claude attribution anywhere), decisions and open items. Stages 0-3 have passed (tags v0.0.1-stage0,
-v0.1.0-stage1, v0.2.0-stage2, v0.3.0-stage3); the Service with effects and the power/session/display policy is
-installed and running on this PC.
+v0.1.0-stage1, v0.2.0-stage2, v0.3.0-stage3). Stage 4 (Agent, tray, hotkeys, ambilight) is built on branch
+stage-4-agent and installed on this PC; its gate tests are still open.
 
-First: run `.\build.ps1 -Test` (expect 165 green tests), check `git status` and that main equals origin/main, and
-run `& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines,
-ask the open question from HANDOFF.md section 7 (O5). Start stage 4 only when the owner says so.
+First: `git checkout stage-4-agent && git pull`, run `.\build.ps1 -Test` (expect 198 green tests), and run
+`& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines and
+continue with HANDOFF.md section 7 (stage 4 gate).
 ```
 
 Useful commands:
@@ -398,6 +503,8 @@ Useful commands:
 & 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status
 & 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --profile "Solid White"
 & 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --group RAM --fps 10 --speed 0.08 --scale 0.3
+& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --strip-test 120
+& 'C:\Program Files\RGBcontroller\RGBcontroller.Agent.exe' --capture-probe 20 $env:TEMP\probe
 .\tools\Measure-TimeToFirstLight.ps1 -Last 2
 .\tools\Measure-RGBcontroller.ps1 -Label check -DurationSeconds 60 -OutDir $env:TEMP
 Get-Content (Get-ChildItem C:\ProgramData\RGBcontroller\logs\service-*.log | Sort-Object LastWriteTime)[-1].FullName -Tail 30

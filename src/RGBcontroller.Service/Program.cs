@@ -25,6 +25,9 @@ internal static class Program
           --group <name> [--in <profile>] [--fps <1-60>] [--speed <cycles/s>] [--scale <x>] [--brightness <0-100>]
                                  Tune a group live and save it: the frame rate applies to the group in every
                                  profile, speed/scale/brightness to its effect in <profile> (default: the active one).
+          --strip-test [<seconds>]
+                                 Show the strip identification pattern (default 60 s, 0 ends it): the first 3 LEDs
+                                 green, the last 3 red, every 10th white. Use it to fill in strip.layout.
           --data-dir <folder>    Use <folder> instead of %ProgramData%\RGBcontroller.
         """;
 
@@ -36,12 +39,13 @@ internal static class Program
             return 2;
         }
 
-        if (options.Mode is Mode.Status or Mode.SetProfile or Mode.TuneGroup)
+        if (options.Mode is Mode.Status or Mode.SetProfile or Mode.TuneGroup or Mode.StripTest)
         {
             Func<IServiceControl, Task<CommandResult>>? command = options.Mode switch
             {
                 Mode.SetProfile => service => service.SetActiveProfileAsync(options.Profile!, CancellationToken.None),
                 Mode.TuneGroup => service => service.TuneGroupAsync(options.Tuning!, CancellationToken.None),
+                Mode.StripTest => service => service.ShowStripTestAsync(options.Seconds, CancellationToken.None),
                 _ => null,
             };
             return await ControlClient.RunAsync(command).ConfigureAwait(false);
@@ -128,9 +132,11 @@ internal static class Program
         Status,
         SetProfile,
         TuneGroup,
+        StripTest,
     }
 
-    private sealed record Options(Mode Mode, bool Rescan, string? DataDir, string? Profile = null, GroupTuningRequest? Tuning = null);
+    private sealed record Options(
+        Mode Mode, bool Rescan, string? DataDir, string? Profile = null, GroupTuningRequest? Tuning = null, int Seconds = 60);
 
     private static bool TryParse(string[] args, out Options options)
     {
@@ -139,6 +145,7 @@ internal static class Program
         string? dataDir = null;
         string? profile = null;
         GroupTuningRequest? tuning = null;
+        var seconds = 60;
         options = new Options(mode, rescan, dataDir);
         for (var i = 0; i < args.Length; i++)
         {
@@ -160,6 +167,15 @@ internal static class Program
                 case "--group" when mode == Mode.None && i + 1 < args.Length:
                     mode = Mode.TuneGroup;
                     tuning = new GroupTuningRequest(args[++i]);
+                    break;
+                case "--strip-test" when mode == Mode.None:
+                    mode = Mode.StripTest;
+                    if (i + 1 < args.Length && int.TryParse(args[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var duration))
+                    {
+                        seconds = duration;
+                        i++;
+                    }
+
                     break;
                 case "--in" when tuning is not null && i + 1 < args.Length:
                     tuning = tuning with { Profile = args[++i] };
@@ -196,7 +212,7 @@ internal static class Program
             return false;
         }
 
-        options = new Options(mode, rescan, dataDir, profile, tuning);
+        options = new Options(mode, rescan, dataDir, profile, tuning, seconds);
         return true;
     }
 

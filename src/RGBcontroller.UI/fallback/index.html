@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RGBcontroller</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<style>
+  :root { --bg: #0b0d12; --panel: #121722; --line: #243044; --text: #c8d3e0; --dim: #6b7a90; --cyan: #00e5ff; --magenta: #ff2bd6; --bad: #ff5a5a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font: 600 18px/1 "Consolas", monospace; letter-spacing: .12em; color: var(--cyan); }
+  .note { color: var(--dim); font-size: 12px; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; padding: 24px; }
+  section { background: var(--panel); border: 1px solid var(--line); padding: 16px;
+            clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); }
+  h2 { margin: 0 0 12px; font: 600 12px/1 "Consolas", monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  .mono { font-family: "Consolas", monospace; }
+  .ok { color: var(--cyan); } .bad { color: var(--bad); }
+  button { background: transparent; color: var(--text); border: 1px solid var(--line); padding: 6px 12px; margin: 0 6px 6px 0; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--cyan); } button.on { border-color: var(--magenta); color: var(--magenta); }
+  input[type=range] { width: 100%; accent-color: var(--cyan); }
+  ul { margin: 0; padding-left: 18px; } li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>RGBCONTROLLER</h1>
+  <span class="note">Bridge test page. The full interface is built from <span class="mono">ui/</span> (React) once Node.js is available.</span>
+</header>
+<main>
+  <section><h2>Service</h2><div id="connection" class="mono">connecting...</div><div id="status" class="mono"></div></section>
+  <section><h2>Profiles</h2><div id="profiles"></div></section>
+  <section>
+    <h2>Ambilight</h2><div id="modes"></div>
+    <div class="mono">brightness <span id="brightnessValue"></span>%</div>
+    <input id="brightness" type="range" min="0" max="100">
+  </section>
+  <section><h2>Devices</h2><ul id="devices" class="mono"></ul></section>
+</main>
+<script>
+  const pending = new Map();
+  let nextId = 1;
+  const $ = id => document.getElementById(id);
+
+  function call(method, params) {
+    const id = nextId++;
+    window.chrome.webview.postMessage(JSON.stringify({ id, method, params }));
+    return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+  }
+
+  function button(label, on, click) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.className = on ? "on" : "";
+    b.onclick = click;
+    return b;
+  }
+
+  function showState(state) {
+    $("status").textContent = `OpenRGB ${state.status.openRgb}, strip ${state.status.strip}, shown ${state.shownProfile}${state.allOff ? ", everything off" : ""}`;
+    $("profiles").replaceChildren(...state.profiles.map(p => button(p, p === state.activeProfile, () => call("setActiveProfile", { name: p }))));
+    $("modes").replaceChildren(...["Screen", "Radial", "Solid", "Off"].map(m => button(m, m === state.stripMode, () => call("changeStrip", { mode: m }))));
+    if (document.activeElement !== $("brightness")) $("brightness").value = state.stripBrightnessPercent;
+    $("brightnessValue").textContent = state.stripBrightnessPercent;
+  }
+
+  async function loadDevices() {
+    try {
+      const list = await call("getDevices");
+      $("devices").replaceChildren(...list.devices.map(d => {
+        const li = document.createElement("li");
+        li.textContent = `${d.name}: ${d.zones.map(z => `${z.name} ${z.ledCount}`).join(", ")}`;
+        return li;
+      }), Object.assign(document.createElement("li"), { textContent: `Adalight strip: ${list.stripLedCount} LEDs` }));
+    } catch (e) { $("devices").textContent = e.message; }
+  }
+
+  let timer;
+  $("brightness").oninput = e => {
+    $("brightnessValue").textContent = e.target.value;
+    clearTimeout(timer);
+    timer = setTimeout(() => call("changeStrip", { brightnessPercent: Number(e.target.value) }), 80);
+  };
+
+  window.chrome.webview.addEventListener("message", e => {
+    const message = JSON.parse(e.data);
+    if (message.id !== undefined) {
+      const p = pending.get(message.id);
+      pending.delete(message.id);
+      if (p) "error" in message ? p.reject(new Error(message.error)) : p.resolve(message.result);
+    } else if (message.event === "connection") {
+      const c = message.data;
+      $("connection").innerHTML = c.connected ? `<span class="ok">connected</span> to Service ${c.version}` : `<span class="bad">not connected</span>: ${c.error ?? ""}`;
+      if (c.connected) loadDevices();
+    } else if (message.event === "state") {
+      showState(message.data);
+    }
+  });
+</script>
+</body>
+</html>
