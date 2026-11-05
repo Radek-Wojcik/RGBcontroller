@@ -305,6 +305,18 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         || next.OpenRgb != current.OpenRgb
         || next.Logging != current.Logging;
 
+    public string? ReopenStrip()
+    {
+        if (_strip is null)
+        {
+            return "The strip is disabled.";
+        }
+
+        _log.Information("Strip reconnect requested by a client");
+        _strip.Reopen("requested by the user");
+        return null;
+    }
+
     public StripColors GetStripColors() => new(_lighting?.StripSnapshot() ?? []);
 
     public DeviceList GetDevices()
