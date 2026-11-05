@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placeStrip } from "./strip";
+import { decodeColors, nearestSlot, placeStrip } from "./strip";
 import { paletteCss, setTurnOff, updateGroupEffect } from "./config";
 import type { AppConfig, StripLayoutConfig } from "./types";
 import fixture from "./mock-config.json";
@@ -30,6 +30,21 @@ describe("placeStrip", () => {
     expect(leds[0]!.edge).toBe("Left");
     expect(leds[0]!.y).toBeCloseTo(1 - 9.5 / 23);
     expect(leds[132]!.edge).toBe("Left");
+  });
+});
+
+describe("first LED picking", () => {
+  it("returns the offset that puts LED 0 where the user clicked", () => {
+    const config = layout({ startCorner: "BottomLeft", top: 41, right: 23, bottom: 43, left: 23 });
+    const offset = nearestSlot(config, 0, 1 - 9.5 / 23);
+    expect(offset).toBe(9);
+    const leds = placeStrip({ ...config, offset }, 133);
+    expect(leds[0]!.edge).toBe("Left");
+    expect(leds[0]!.y).toBeCloseTo(1 - 9.5 / 23);
+  });
+
+  it("decodes the Service's base64 colors", () => {
+    expect([...decodeColors(btoa(String.fromCharCode(255, 0, 128)))]).toEqual([255, 0, 128]);
   });
 });
 

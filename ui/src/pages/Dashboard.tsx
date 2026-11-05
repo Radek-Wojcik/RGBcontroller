@@ -1,7 +1,7 @@
 import { bridge } from "../bridge";
 import { findProfile, paletteCss, updateGroupEffect, updateProfile } from "../config";
 import { useStore, useThrottled } from "../store";
-import { StripView } from "../StripView";
+import { StripView, useStripColors } from "../StripView";
 import type { AmbilightMode, AppConfig, DeviceList, EffectKind, GroupConfig, GroupEffectConfig } from "../types";
 import { Empty, Panel, Segmented, Select, Slider } from "../ui";
 
@@ -35,6 +35,7 @@ function AmbilightTile({ config }: { config: AppConfig }) {
   const profile = findProfile(config, state!.activeProfile)!;
   const a = profile.ambilight;
   const sendBrightness = useThrottled((v: number) => run(() => bridge.call("changeStrip", { brightnessPercent: v })));
+  const live = useStripColors();
   const saveColor = useThrottled((color: string) =>
     editConfig(c => updateProfile(c, profile.name, p => ({ ...p, ambilight: { ...p.ambilight, solidColor: color.toUpperCase() } }))), 300);
 
@@ -42,7 +43,7 @@ function AmbilightTile({ config }: { config: AppConfig }) {
     <Panel wide tall title="Ambilight" meta={<span className="num">{config.strip.ledCount} LED · {state!.captureWanted ? "capturing" : "idle"}</span>}>
       <div className="ambilight">
         <StripView layout={config.strip.layout} ledCount={config.strip.ledCount} mode={state!.allOff ? "Off" : a.mode}
-          solidColor={a.solidColor} brightness={state!.stripBrightnessPercent} speed={a.speed} />
+          solidColor={a.solidColor} brightness={state!.stripBrightnessPercent} speed={a.speed} live={live} />
         <div className="controls">
           <Segmented options={MODES} value={a.mode} onChange={(mode: AmbilightMode) => run(() => bridge.call("changeStrip", { mode }))} />
           <Slider label={a.mode === "Solid" ? "Solid power" : "Brightness"} value={state!.stripBrightnessPercent} min={0} max={100} unit="%"
