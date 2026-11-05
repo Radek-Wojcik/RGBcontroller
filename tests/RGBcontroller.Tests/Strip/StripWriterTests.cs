@@ -191,8 +191,9 @@ public sealed class StripWriterTests
     {
         var writer = new StripWriter(new StripConfig { LedCount = 113, BaudRate = 115200, MaxFps = 60 }, new FakePorts(), Logger.None);
 
-        // 33.4 FPS link limit x 0.95 = 31.
-        Assert.Equal(31, writer.EffectiveMaxFps);
+        // 33.4 FPS link limit x 0.75 = 25; 133 LEDs: 28.4 x 0.75 = 21.
+        Assert.Equal(25, writer.EffectiveMaxFps);
+        Assert.Equal(21, new StripWriter(new StripConfig { LedCount = 133, MaxFps = 60 }, new FakePorts(), Logger.None).EffectiveMaxFps);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
