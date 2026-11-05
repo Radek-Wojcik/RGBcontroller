@@ -44,7 +44,11 @@ What works today on the owner's PC:
 - `RGBcontroller.Service.exe --status | --profile <name> | --group <name> ...` control the running Service over
   the named pipe, without elevation.
 
-Repository: <https://github.com/Radek-Wojcik/RGBcontroller> (**private**, no LICENSE file: "All rights reserved").
+Repository: <https://github.com/Radek-Wojcik/RGBcontroller>, **public since 2026-11-05, MIT license** (owner's decision).
+- `stage-5-ui` was merged into `main` through PR #3 (stages 4 and 5, README with screenshots, LICENSE) and PR #4.
+  Work continues on `stage-5-ui`; bring it to `main` with a PR.
+- `reference/` is untracked and git-ignored (it stays on the owner's disk); it is still in two old commits, the
+  owner chose not to rewrite history.
 - `main` contains the merged `stage-1-service`, `stage-2-effects` and `stage-3-power` branches (`--no-ff`) and is
   pushed, with tag `v0.3.0-stage3`.
 - The stage branches are merged and can be deleted.
