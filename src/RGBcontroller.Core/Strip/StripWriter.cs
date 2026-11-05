@@ -102,11 +102,19 @@ public sealed class StripWriter : IAsyncDisposable
         _baudRate = Math.Max(1200, config.BaudRate);
 
         var linkFps = AdalightFrame.MaxFramesPerSecond(config.BaudRate, config.LedCount);
-        EffectiveMaxFps = Math.Max(1, Math.Min(config.MaxFps, (int)Math.Floor(linkFps * 0.95)));
+        EffectiveMaxFps = Math.Max(1, Math.Min(config.MaxFps, (int)Math.Floor(linkFps * LinkShare)));
         _minFrameInterval = TimeSpan.FromSeconds(1.0 / EffectiveMaxFps);
     }
 
-    /// <summary>Configured FPS clamped to 95% of what the serial link can carry.</summary>
+    /// <summary>
+    /// Share of the serial link the frames may use. The board drops incoming bytes while it clocks the LEDs out (about
+    /// 4 ms for 133 LEDs); at 95% the gap between frames was 2 ms, the link was busy all the time once Screen mode
+    /// captured at 30 FPS, and the LED BOX locked up with the LEDs latched (2026-11-05, frozen white, no handshakes).
+    /// 75% leaves about 9 ms between frames (20 FPS for 133 LEDs).
+    /// </summary>
+    public const double LinkShare = 0.75;
+
+    /// <summary>Configured FPS clamped to <see cref="LinkShare"/> of what the serial link can carry.</summary>
     public int EffectiveMaxFps { get; }
 
     public StripState State { get; private set; } = StripState.Stopped;
