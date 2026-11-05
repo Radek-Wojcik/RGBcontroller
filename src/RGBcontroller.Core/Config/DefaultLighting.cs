@@ -68,7 +68,7 @@ public static class DefaultLighting
         Synced("Cyberpunk", "Cyberpunk", speedFactor: 0.6) with
         {
             // The strip matches the theme when it cannot mirror the screen (lock screen) or runs Radial.
-            Ambilight = new() { Mode = AmbilightMode.Screen, Palette = "Cyberpunk", Speed = 0.06 },
+            Ambilight = new() { Mode = AmbilightMode.Screen, Palette = "Cyberpunk", Speed = 0.06, SolidColor = "#FF2BD6" },
         },
         Aurora(),
         Night(),
@@ -107,7 +107,7 @@ public static class DefaultLighting
             new() { Group = MouseGroup, Effect = EffectKind.Aurora, Palette = "Aurora", Speed = 0.05 },
             new() { Group = GpuGroup, Effect = EffectKind.Aurora, Palette = "Aurora", Speed = 0.05 },
         ],
-        Ambilight = new() { Mode = AmbilightMode.Screen, Palette = "Aurora", Speed = 0.03 },
+        Ambilight = new() { Mode = AmbilightMode.Screen, Palette = "Aurora", Speed = 0.03, SolidColor = "#00C9A7" },
     };
 
     private static ProfileConfig Night() => new()
