@@ -62,6 +62,9 @@ public interface IServiceControl
 
     /// <summary>The colors the strip shows right now, for the UI's live preview; the UI polls it while visible (since 1.5).</summary>
     Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Closes and reopens the strip's serial port (diagnostics when the LED box stops reacting) (since 1.6).</summary>
+    Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Notifications the Service sends to subscribed clients (JSON-RPC notifications, no reply).</summary>

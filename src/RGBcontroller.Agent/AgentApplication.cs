@@ -281,6 +281,7 @@ internal sealed class AgentApplication : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
 
         var allOff = state?.AllOff == true;
+        menu.Items.Add(Item("Reconnect strip", connected, () => _service.Send("Reconnect strip", (s, ct) => s.ReopenStripAsync(ct))));
         menu.Items.Add(Item(allOff ? "Turn everything on" : "Turn everything off", connected,
             () => _service.Send(allOff ? "All on" : "All off", (s, ct) => s.SetAllOffAsync(!allOff, ct))));
         menu.Items.Add(new ToolStripSeparator());
