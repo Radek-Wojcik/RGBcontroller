@@ -23,6 +23,12 @@ public sealed class LetterboxDetector(TimeSpan stableTime)
     /// <summary>Share of black samples that makes a row or column part of a bar.</summary>
     public const double BarShare = 0.75;
 
+    /// <summary>
+    /// The picture starts only where this share of the height (width) in a row is not bar: thinner lines across a bar
+    /// (a player's progress bar, a title) are skipped (stage 4 gate: a 21:9 trailer kept the strip's top and bottom dark).
+    /// </summary>
+    private const double MinimumPicture = 0.03;
+
     private static readonly float LinearBarBlack = ColorMath.SrgbToLinear(BarBlack / 255);
 
     private ContentRect _candidate;
@@ -46,7 +52,7 @@ public sealed class LetterboxDetector(TimeSpan stableTime)
         var maxRows = (int)(h * MaximumBar);
         var maxColumns = (int)(w * MaximumBar);
         var top = CountDarkRows(image, 0, 1, maxRows, threshold);
-        if (top == maxRows && CountDarkRows(image, h / 2, 1, 1, threshold) == 1 && IsDarkColumn(image, w / 2, threshold))
+        if (top == maxRows && IsDarkRow(image, h / 2, threshold) && IsDarkColumn(image, w / 2, threshold))
         {
             // Black across the middle too: a dark scene, not bars.
             return Current;
@@ -83,28 +89,40 @@ public sealed class LetterboxDetector(TimeSpan stableTime)
 
     private static int CountDarkRows(in ScreenImage image, int start, int direction, int max, float threshold)
     {
+        var run = Math.Max(2, (int)Math.Ceiling(image.Height * MinimumPicture));
+        var picture = 0;
         for (var i = 0; i < max; i++)
         {
-            if (!IsDarkRow(image, start + i * direction, threshold))
+            if (IsDarkRow(image, start + i * direction, threshold))
             {
-                return i;
+                picture = 0;
+            }
+            else if (++picture >= run)
+            {
+                return i - run + 1;
             }
         }
 
-        return max;
+        return picture > 0 ? max - picture : max;
     }
 
     private static int CountDarkColumns(in ScreenImage image, int start, int direction, int max, float threshold)
     {
+        var run = Math.Max(2, (int)Math.Ceiling(image.Width * MinimumPicture));
+        var picture = 0;
         for (var i = 0; i < max; i++)
         {
-            if (!IsDarkColumn(image, start + i * direction, threshold))
+            if (IsDarkColumn(image, start + i * direction, threshold))
             {
-                return i;
+                picture = 0;
+            }
+            else if (++picture >= run)
+            {
+                return i - run + 1;
             }
         }
 
-        return max;
+        return picture > 0 ? max - picture : max;
     }
 
     private static bool IsDarkRow(in ScreenImage image, int y, float threshold)
