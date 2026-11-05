@@ -16,7 +16,7 @@ of truth for **what exists now**.
 | 1. Service + OpenRGB supervisor + Adalight | **Passed** (2026-10-31) | `v0.1.0-stage1` | `docs/spikes/R1-R5-R6-stage1.md` |
 | 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
 | 3. Power, session, display | **Passed** (2026-11-01; owner waived the remaining 7 sleep and 3 hibernate cycles) | `v0.3.0-stage3` | `docs/spikes/stage3-power.md` |
-| 4. Agent, tray, hotkeys, ambilight | **Gate partly run** (2026-11-04): tests 1, 2, 5 passed, 6 (HDR) skipped by the owner, 3, 4, 7, 8, 9 to repeat on the fixed build | | `docs/spikes/stage4-agent.md` |
+| 4. Agent, tray, hotkeys, ambilight | **Passed** (2026-11-05; HDR skipped by the owner; ambilight CPU about 0.03%). Version 0.4.0; tag `v0.4.0-stage4` after the merge into `main` | | `docs/spikes/stage4-agent.md` |
 | 5. UI | **In progress** on `stage-5-ui`: IPC 1.4, WebView2 shell, React front end with six pages; next: live preview, identify API, wizards | | `docs/spikes/stage5-ui-plan.md` |
 | 6 | Not started | | |
 
@@ -458,7 +458,12 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 **Current (2026-11-04):**
 1. Ask the owner to repeat stage 4 tests 3, 4 (they say "mierz", then measure), 7, 8 and 9 on the installed build.
 2. With the owner's OK: install `stage-5-ui` (`install-dev.ps1`, UAC) so "Open RGBcontroller" in the tray shows the new UI.
-3. Continue stage 5 with `docs/spikes/stage5-ui-plan.md` (front end, preview stream, identify API, wizards).
+3. Continue stage 5 with `docs/spikes/stage5-ui-plan.md`. Done since: live strip and device previews (IPC 1.5 and
+   1.7), ambilight theme per profile, click to place the first LED. Next: identify API and the device mapping
+   wizard, palette editor, profile create/duplicate/rename/delete/import/export, diagnostics page (log tail,
+   restart OpenRGB, rescan).
+4. Version 0.4.0 (c63747f letterbox fix, ccfa0f2 version) is **not installed yet** (UAC cancelled 2026-11-05);
+   install it, then merge `stage-5-ui` into `main` with the owner's OK and tag `v0.4.0-stage4` on that merge.
 
 The stage 4 gate list (still valid):
 
