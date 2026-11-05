@@ -201,6 +201,8 @@ public sealed class ControlServerTests
 
         public DeviceList GetDevices() => new([], 113);
 
+        public StripColors GetStripColors() => new([]);
+
         public void ShowStripTest(TimeSpan duration)
         {
         }

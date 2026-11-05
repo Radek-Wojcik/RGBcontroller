@@ -47,6 +47,15 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task SendsStripColorsAsBase64()
+    {
+        var bridge = new Bridge(() => new FakeService());
+        var reply = JsonNode.Parse(await bridge.HandleAsync("""{"id": 2, "method": "getStripColors"}""", TestContext.Current.CancellationToken))!;
+
+        Assert.Equal(Convert.ToBase64String([255, 0, 128]), reply["result"]!["rgb"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task ReportsAMissingService()
     {
         var bridge = new Bridge(() => null);
@@ -93,5 +102,7 @@ public sealed class BridgeTests
         public Task<ConfigUpdateResult> UpdateConfigAsync(ConfigUpdateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<DeviceList> GetDevicesAsync(CancellationToken cancellationToken) => Task.FromResult(new DeviceList([], 133));
+
+        public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(new StripColors([255, 0, 128]));
     }
 }

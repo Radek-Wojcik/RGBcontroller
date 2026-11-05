@@ -305,6 +305,8 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         || next.OpenRgb != current.OpenRgb
         || next.Logging != current.Logging;
 
+    public StripColors GetStripColors() => new(_lighting?.StripSnapshot() ?? []);
+
     public DeviceList GetDevices()
     {
         var devices = _lighting?.Devices ?? [];
