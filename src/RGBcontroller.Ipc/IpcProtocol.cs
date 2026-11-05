@@ -7,7 +7,7 @@ namespace RGBcontroller.Ipc;
 public static class IpcProtocol
 {
     /// <summary>Breaking changes bump the major version; additive changes bump the minor version.</summary>
-    public static ProtocolVersion Current { get; } = new(1, 5);
+    public static ProtocolVersion Current { get; } = new(1, 6);
 
     /// <summary>JSON-RPC control channel (config, profiles, status, commands).</summary>
     public const string ControlPipeName = "RGBcontroller.Control";
