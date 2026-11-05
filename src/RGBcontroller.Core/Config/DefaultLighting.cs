@@ -65,7 +65,11 @@ public static class DefaultLighting
     public static IReadOnlyList<ProfileConfig> Profiles { get; } =
     [
         Rainbow(RainbowProfile, speedFactor: 1.0, AmbilightMode.Screen),
-        Synced("Cyberpunk", "Cyberpunk", speedFactor: 0.6),
+        Synced("Cyberpunk", "Cyberpunk", speedFactor: 0.6) with
+        {
+            // The strip matches the theme when it cannot mirror the screen (lock screen) or runs Radial.
+            Ambilight = new() { Mode = AmbilightMode.Screen, Palette = "Cyberpunk", Speed = 0.06 },
+        },
         Aurora(),
         Night(),
         SolidWhite(),
@@ -118,7 +122,10 @@ public static class DefaultLighting
             new() { Group = MouseGroup, Effect = EffectKind.Off },
             new() { Group = GpuGroup, Effect = EffectKind.Off },
         ],
-        Ambilight = new() { Mode = AmbilightMode.Solid, SolidColor = "#FF8C3A", SolidBrightnessPercent = 15 },
+        Ambilight = new()
+        {
+            Mode = AmbilightMode.Solid, Fallback = AmbilightMode.Solid, SolidColor = "#FF8C3A", SolidBrightnessPercent = 15, Palette = "Ember",
+        },
     };
 
     private static ProfileConfig SolidWhite() => new()
@@ -133,7 +140,7 @@ public static class DefaultLighting
             new() { Group = MouseGroup, Effect = EffectKind.Static, Palette = "#FFFFFF" },
             new() { Group = GpuGroup, Effect = EffectKind.Static, Palette = "#FFFFFF" },
         ],
-        Ambilight = new() { Mode = AmbilightMode.Solid, SolidColor = "#FFFFFF", SolidBrightnessPercent = 100 },
+        Ambilight = new() { Mode = AmbilightMode.Solid, Fallback = AmbilightMode.Solid, SolidColor = "#FFFFFF", SolidBrightnessPercent = 100 },
     };
 
     private static ZoneLayoutConfig Zone(string device, string zone, LedShape shape, bool vertical = false) =>
