@@ -203,6 +203,8 @@ public sealed class ControlServerTests
 
         public StripColors GetStripColors() => new([]);
 
+        public string? ReopenStrip() => null;
+
         public void ShowStripTest(TimeSpan duration)
         {
         }

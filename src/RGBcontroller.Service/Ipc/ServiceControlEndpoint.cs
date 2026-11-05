@@ -37,6 +37,9 @@ internal interface IControllableHost
     DeviceList GetDevices();
 
     StripColors GetStripColors();
+
+    /// <returns>Null on success, otherwise a message for the client.</returns>
+    string? ReopenStrip();
 }
 
 /// <summary>The control connection a request arrived on; subscribing makes the server push state changes to it.</summary>
@@ -166,6 +169,12 @@ internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubsc
     public Task<DeviceList> GetDevicesAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetDevices());
 
     public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetStripColors());
+
+    public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken)
+    {
+        var error = host.ReopenStrip();
+        return Task.FromResult(new CommandResult(error is null, error));
+    }
 
     public Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken)
     {

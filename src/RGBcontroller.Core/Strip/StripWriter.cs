@@ -87,6 +87,10 @@ public sealed class StripWriter : IAsyncDisposable
     private string _reopenReason = "";
     private TaskCompletionSource? _blackRequest;
     private bool _handshakeLogged;
+    private readonly Stopwatch _summaryWindow = Stopwatch.StartNew();
+    private int _summaryFrames;
+    private int _summaryHandshakes;
+    private int _summaryBytes;
     private int _brightnessPercent;
     private Task _loop = Task.CompletedTask;
     private long _framesWritten;
@@ -378,16 +382,28 @@ public sealed class StripWriter : IAsyncDisposable
     private void Watch(IStripTransport transport)
     {
         _windowFrames++;
+        _summaryFrames++;
         var read = transport.ReadAvailable(_readBuffer);
+        _summaryBytes += read;
         if (read > 0 && _readBuffer.AsSpan(0, read).IndexOf("Ada"u8) >= 0)
         {
             _windowHandshakes++;
+            _summaryHandshakes++;
             if (!_handshakeLogged)
             {
                 // Diagnostics: the board says "Ada" only while it receives no frames.
                 _handshakeLogged = true;
                 _log.Information("The strip board sent a handshake while connected ({Frames} frames written so far)", FramesWritten);
             }
+        }
+
+        if (_summaryWindow.Elapsed >= TimeSpan.FromMinutes(1))
+        {
+            // Diagnostics for a frozen LED box: does the board still talk (handshakes = alive but not taking frames)?
+            _log.Information("Strip link last minute: {Frames} frames sent, {Bytes} bytes received from the board, {Handshakes} handshakes",
+                _summaryFrames, _summaryBytes, _summaryHandshakes);
+            _summaryFrames = _summaryBytes = _summaryHandshakes = 0;
+            _summaryWindow.Restart();
         }
 
         if (_watchWindow.Elapsed < _timings.WatchdogWindow)

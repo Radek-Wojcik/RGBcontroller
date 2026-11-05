@@ -28,6 +28,7 @@ internal static class Program
           --strip-test [<seconds>]
                                  Show the strip identification pattern (default 60 s, 0 ends it): the first 3 LEDs
                                  green, the last 3 red, every 10th white. Use it to fill in strip.layout.
+          --strip-reopen         Close and reopen the strip's serial port (when the LED box stops reacting).
           --data-dir <folder>    Use <folder> instead of %ProgramData%\RGBcontroller.
         """;
 
@@ -39,13 +40,14 @@ internal static class Program
             return 2;
         }
 
-        if (options.Mode is Mode.Status or Mode.SetProfile or Mode.TuneGroup or Mode.StripTest)
+        if (options.Mode is Mode.Status or Mode.SetProfile or Mode.TuneGroup or Mode.StripTest or Mode.StripReopen)
         {
             Func<IServiceControl, Task<CommandResult>>? command = options.Mode switch
             {
                 Mode.SetProfile => service => service.SetActiveProfileAsync(options.Profile!, CancellationToken.None),
                 Mode.TuneGroup => service => service.TuneGroupAsync(options.Tuning!, CancellationToken.None),
                 Mode.StripTest => service => service.ShowStripTestAsync(options.Seconds, CancellationToken.None),
+                Mode.StripReopen => service => service.ReopenStripAsync(CancellationToken.None),
                 _ => null,
             };
             return await ControlClient.RunAsync(command).ConfigureAwait(false);
@@ -133,6 +135,7 @@ internal static class Program
         SetProfile,
         TuneGroup,
         StripTest,
+        StripReopen,
     }
 
     private sealed record Options(
@@ -167,6 +170,9 @@ internal static class Program
                 case "--group" when mode == Mode.None && i + 1 < args.Length:
                     mode = Mode.TuneGroup;
                     tuning = new GroupTuningRequest(args[++i]);
+                    break;
+                case "--strip-reopen" when mode == Mode.None:
+                    mode = Mode.StripReopen;
                     break;
                 case "--strip-test" when mode == Mode.None:
                     mode = Mode.StripTest;
