@@ -11,7 +11,7 @@ public sealed class AdalightFrameTests
     {
         var frame = new AdalightFrame(113, ColorOrder.Rgb, 4500);
 
-        // hi/lo = 112 big-endian, chk = hi ^ lo ^ 0x55 (reference/Test-Adalight.ps1).
+        // hi/lo = 112 big-endian, chk = hi ^ lo ^ 0x55 (SPEC section 2, verified on the hardware).
         Assert.Equal(new byte[] { (byte)'A', (byte)'d', (byte)'a', 0, 112, 0 ^ 112 ^ 0x55 }, frame.Bytes[..6].ToArray());
         Assert.Equal(345, frame.Bytes.Length);
     }
