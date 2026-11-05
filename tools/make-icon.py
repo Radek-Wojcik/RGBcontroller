@@ -1,5 +1,5 @@
 """Draws the RGBcontroller icon (assets/rgbcontroller.ico): the brand mark of the UI (a conic rainbow with two
-clipped corners) around a dark core, at 16-256 px. Standard library only; run `python tools/make-icon.py`."""
+clipped corners) around a dark core with a small mark inside, at 16-256 px. Standard library only; run `python tools/make-icon.py`."""
 import colorsys
 import math
 import os
@@ -31,10 +31,13 @@ def pixel(size, px, py):
             y = (py + (sy + 0.5) / n) / size
             if not inside_mark(x, y):
                 continue
-            # The core: a dark clipped square, so the ring of color reads like a lit LED loop.
-            cx, cy = (x - 0.5) / 0.30, (y - 0.5) / 0.30
+            # A dark clipped core like a monitor with its ambilight around it, and the mark again in its middle, so
+            # the center is not an empty black square.
+            cx, cy = (x - 0.5) / 0.31, (y - 0.5) / 0.31
             core = abs(cx) < 1 and abs(cy) < 1 and (cx + cy) > -1.6 and (cx + cy) < 1.6
-            if core:
+            mx, my = (x - 0.5) / 0.15, (y - 0.5) / 0.15
+            inner = abs(mx) < 1 and abs(my) < 1 and (mx + my) > -1.6 and (mx + my) < 1.6
+            if core and not inner:
                 cr, cg, cb = (c / 255 for c in CORE)
             else:
                 hue = (math.atan2(y - 0.5, x - 0.5) / (2 * math.pi) + 0.25) % 1.0

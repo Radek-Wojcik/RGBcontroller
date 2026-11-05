@@ -19,6 +19,36 @@ internal static partial class TrayTheme
     public static ToolStripRenderer CreateRenderer() => new Renderer();
 
     /// <summary>Tray icons drawn at the current small-icon size: rainbow ring (ok), amber broken ring (degraded), grey ring (off).</summary>
+    /// <summary>The mark's outline: polygon(30% 0, 100% 0, 100% 70%, 70% 100%, 0 100%, 0 30%) in <paramref name="r"/>.</summary>
+    private static PointF[] Mark(RectangleF r) =>
+    [
+        new(r.Left + r.Width * 0.3f, r.Top), new(r.Right, r.Top), new(r.Right, r.Top + r.Height * 0.7f),
+        new(r.Left + r.Width * 0.7f, r.Bottom), new(r.Left, r.Bottom), new(r.Left, r.Top + r.Height * 0.3f),
+    ];
+
+    /// <summary>Fills the mark with hue by angle around its center (or grey).</summary>
+    private static void FillMark(Graphics g, RectangleF r, bool grey)
+    {
+        using var path = new GraphicsPath();
+        path.AddPolygon(Mark(r));
+        var clip = g.Clip;
+        g.SetClip(path);
+        const int Segments = 36;
+        var center = new PointF(r.Left + r.Width / 2, r.Top + r.Height / 2);
+        var reach = r.Width;
+        for (var i = 0; i < Segments; i++)
+        {
+            using var brush = new SolidBrush(grey ? DimText : FromHue(i * 360.0 / Segments));
+            g.FillPie(brush, center.X - reach, center.Y - reach, reach * 2, reach * 2, -90 + i * 360f / Segments, 360f / Segments + 1);
+        }
+
+        g.Clip = clip;
+    }
+
+    /// <summary>
+    /// The application mark (assets/rgbcontroller.ico, drawn by tools/make-icon.py): a rainbow square with two clipped
+    /// corners around a dark core with a small mark inside. Degraded adds an amber dot; Off is grey.
+    /// </summary>
     public static Icon CreateIcon(TrayIconState state)
     {
         var size = SystemInformation.SmallIconSize.Width;
@@ -26,33 +56,21 @@ internal static partial class TrayTheme
         using (var g = Graphics.FromImage(bitmap))
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            var stroke = Math.Max(2f, size / 6f);
-            var rect = new RectangleF(stroke / 2 + 0.5f, stroke / 2 + 0.5f, size - stroke - 1, size - stroke - 1);
-            switch (state)
+            var grey = state == TrayIconState.Off;
+            FillMark(g, new RectangleF(0, 0, size, size), grey);
+            using (var core = new SolidBrush(Background))
             {
-                case TrayIconState.Ok:
-                    const int Segments = 24;
-                    for (var i = 0; i < Segments; i++)
-                    {
-                        using var pen = new Pen(FromHue(i * 360.0 / Segments), stroke);
-                        g.DrawArc(pen, rect, -90 + i * 360f / Segments, 360f / Segments + 1);
-                    }
+                g.FillPolygon(core, Mark(new RectangleF(size * 0.19f, size * 0.19f, size * 0.62f, size * 0.62f)));
+            }
 
-                    break;
-                case TrayIconState.Degraded:
-                    using (var pen = new Pen(Warning, stroke))
-                    {
-                        g.DrawArc(pen, rect, -60, 300);
-                    }
-
-                    break;
-                default:
-                    using (var pen = new Pen(DimText, stroke))
-                    {
-                        g.DrawEllipse(pen, rect);
-                    }
-
-                    break;
+            FillMark(g, new RectangleF(size * 0.35f, size * 0.35f, size * 0.30f, size * 0.30f), grey);
+            if (state == TrayIconState.Degraded)
+            {
+                var dot = size * 0.42f;
+                using var amber = new SolidBrush(Warning);
+                using var ring = new Pen(Background, Math.Max(1f, size / 16f));
+                g.FillEllipse(amber, size - dot, size - dot, dot - 0.5f, dot - 0.5f);
+                g.DrawEllipse(ring, size - dot, size - dot, dot - 0.5f, dot - 0.5f);
             }
         }
 
