@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <Resource Include="..\..\assets\rgbcontroller.ico" Link="rgbcontroller.ico" />
+    <!-- Also next to the exe: shortcuts point at this file, so an icon change is not hidden by Explorer's icon cache. -->
+    <None Include="..\..\assets\rgbcontroller.ico" Link="rgbcontroller.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
