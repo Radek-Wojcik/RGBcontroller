@@ -46,7 +46,9 @@ export function App() {
 
 function Shell() {
   const pageIds = PAGES.map(p => p.id);
-  const [page, setPage] = useState<PageId>(() => readSetting("page", pageIds, "dashboard"));
+  // ?page=ambilight opens a page directly (documentation screenshots); otherwise the last page is restored.
+  const linked = new URLSearchParams(location.search).get("page") as PageId | null;
+  const [page, setPage] = useState<PageId>(() => (linked && pageIds.includes(linked) ? linked : readSetting("page", pageIds, "dashboard")));
   const [accent, setAccent] = useState<Accent>(() => readSetting("accent", ["cyan", "magenta", "acid"] as const, "cyan"));
   useEffect(() => writeSetting("page", page), [page]);
   useEffect(() => {
