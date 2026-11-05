@@ -35,6 +35,8 @@ internal interface IControllableHost
     ConfigUpdateResult UpdateConfig(long expectedRevision, AppConfig config);
 
     DeviceList GetDevices();
+
+    StripColors GetStripColors();
 }
 
 /// <summary>The control connection a request arrived on; subscribing makes the server push state changes to it.</summary>
@@ -162,6 +164,8 @@ internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubsc
     }
 
     public Task<DeviceList> GetDevicesAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetDevices());
+
+    public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetStripColors());
 
     public Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken)
     {

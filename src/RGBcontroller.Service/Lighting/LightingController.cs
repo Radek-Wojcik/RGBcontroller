@@ -68,6 +68,9 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
 
     public IReadOnlyList<ControllerData> Devices => _engine.Devices;
 
+    /// <summary>What the strip shows right now (live preview in the UI).</summary>
+    public byte[] StripSnapshot() => _output.StripSnapshot();
+
     public void SetStripLayout(StripLayout layout)
     {
         _engine.SetStripLayout(layout);
@@ -209,7 +212,39 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
             }
         }
 
-        public void SetStripLeds(ReadOnlySpan<RgbColor> colors) => strip?.SetColors(colors, 100);
+        private readonly Lock _stripGate = new();
+        private RgbColor[] _lastStrip = [];
+
+        public void SetStripLeds(ReadOnlySpan<RgbColor> colors)
+        {
+            strip?.SetColors(colors, 100);
+            lock (_stripGate)
+            {
+                if (_lastStrip.Length != colors.Length)
+                {
+                    _lastStrip = new RgbColor[colors.Length];
+                }
+
+                colors.CopyTo(_lastStrip);
+            }
+        }
+
+        /// <summary>The colors last sent to the strip (brightness applied, before the current limiter), as R,G,B bytes.</summary>
+        public byte[] StripSnapshot()
+        {
+            lock (_stripGate)
+            {
+                var bytes = new byte[_lastStrip.Length * 3];
+                for (var i = 0; i < _lastStrip.Length; i++)
+                {
+                    bytes[i * 3] = _lastStrip[i].R;
+                    bytes[i * 3 + 1] = _lastStrip[i].G;
+                    bytes[i * 3 + 2] = _lastStrip[i].B;
+                }
+
+                return bytes;
+            }
+        }
 
         /// <summary>The supervisor notices the lost connection and reconnects; until then writes are skipped.</summary>
         private void ReportFailure(IOException ex)

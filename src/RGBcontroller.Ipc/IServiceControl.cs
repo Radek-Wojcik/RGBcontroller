@@ -59,6 +59,9 @@ public interface IServiceControl
 
     /// <summary>OpenRGB devices the Service drives right now, with their zones (since 1.4).</summary>
     Task<DeviceList> GetDevicesAsync(CancellationToken cancellationToken);
+
+    /// <summary>The colors the strip shows right now, for the UI's live preview; the UI polls it while visible (since 1.5).</summary>
+    Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Notifications the Service sends to subscribed clients (JSON-RPC notifications, no reply).</summary>
@@ -144,6 +147,9 @@ public sealed record ConfigUpdateRequest(long ExpectedRevision, AppConfig Config
 /// <param name="Errors">Validation errors; the configuration was not changed.</param>
 /// <param name="RestartRequired">Saved, but some changes take effect only after the Service restarts.</param>
 public sealed record ConfigUpdateResult(bool Success, string? Message, long Revision, IReadOnlyList<string> Errors, bool RestartRequired);
+
+/// <param name="Rgb">R, G, B bytes per LED in strip order (base64 in JSON); empty without a strip.</param>
+public sealed record StripColors(byte[] Rgb);
 
 public sealed record DeviceList(IReadOnlyList<DeviceInfo> Devices, int StripLedCount);
 
