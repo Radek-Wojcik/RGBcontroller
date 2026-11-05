@@ -1,6 +1,7 @@
 import { bridge } from "../bridge";
 import { findProfile, paletteCss, updateGroupEffect, updateProfile } from "../config";
 import { useStore, useThrottled } from "../store";
+import { GroupLeds, useDeviceColors } from "../DevicePreview";
 import { StripView, useStripColors } from "../StripView";
 import type { AmbilightMode, AppConfig, DeviceList, EffectKind, GroupConfig, GroupEffectConfig } from "../types";
 import { Empty, Panel, Segmented, Select, Slider } from "../ui";
@@ -14,6 +15,7 @@ const ANIMATED = new Set<EffectKind>(["Breathing", "Wave", "Radial", "Mirror", "
 
 export function Dashboard() {
   const { state, snapshot, devices } = useStore();
+  const deviceColors = useDeviceColors();
   if (!state || !snapshot) return <Empty>Waiting for the Service...</Empty>;
   const config = snapshot.config;
   const profile = findProfile(config, state.activeProfile);
@@ -24,7 +26,7 @@ export function Dashboard() {
       <AmbilightTile config={config} />
       {config.lighting.groups.map(group => (
         <GroupTile key={group.name} config={config} group={group} effect={profile.groups.find(g => g.group === group.name)}
-          profile={profile.name} devices={devices} />
+          profile={profile.name} devices={devices} colors={deviceColors} />
       ))}
     </div>
   );
@@ -64,8 +66,9 @@ function AmbilightTile({ config }: { config: AppConfig }) {
   );
 }
 
-function GroupTile({ config, group, effect, profile, devices }: {
+function GroupTile({ config, group, effect, profile, devices, colors }: {
   config: AppConfig; group: GroupConfig; effect: GroupEffectConfig | undefined; profile: string; devices: DeviceList | null;
+  colors: Map<number, Uint8Array>;
 }) {
   const { run, editConfig } = useStore();
   const tune = useThrottled((change: { speed?: number; scale?: number; brightnessPercent?: number; maxFps?: number }) =>
@@ -88,6 +91,7 @@ function GroupTile({ config, group, effect, profile, devices }: {
     <Panel title={group.name} meta={<span className="num">{leds || "?"} LED · {group.maxFps} fps</span>} className={kind === "Off" ? "is-off" : ""}>
       <div className="swatch" style={{ background: kind === "Off" ? undefined : swatch, animationDuration: flow }} data-flow={flow ? "on" : "off"}
         aria-hidden />
+      <GroupLeds group={group} devices={devices} colors={colors} />
       <p className="members">{deviceNames.join(" · ")}</p>
       <div className="row">
         <Select label="Effect" value={kind} options={EFFECTS.map(e => ({ value: e, label: EFFECT_LABELS[e] }))}

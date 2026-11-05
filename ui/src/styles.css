@@ -291,3 +291,9 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ambilight-head { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
 .theme-swatch { flex: 1; height: 8px; background: var(--faint); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
 .ambilight-theme .segmented button { height: 28px; padding: 0 10px; font-size: 12px; }
+
+/* ---------- live LEDs of a device group ---------- */
+
+.group-leds { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: #05070a; border: 1px solid var(--line); }
+.led-zone { display: grid; gap: 3px; }
+.led-zone i { aspect-ratio: 1; max-width: 12px; border-radius: 50%; background: #11161f; border: 1px solid var(--line); }

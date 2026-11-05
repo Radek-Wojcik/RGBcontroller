@@ -186,4 +186,6 @@ export interface BridgeMethods {
   updateConfig: [{ expectedRevision: number; config: AppConfig }, ConfigUpdateResult];
   getDevices: [undefined, DeviceList];
   getStripColors: [undefined, { rgb: string }];
+  getDeviceColors: [undefined, { index: number; rgb: string }[]];
+  reopenStrip: [undefined, CommandResult];
 }
