@@ -1,4 +1,5 @@
 using RGBcontroller.Core;
+using RGBcontroller.Core.Ambilight;
 using RGBcontroller.Core.Config;
 using RGBcontroller.Core.Lighting;
 using RGBcontroller.Core.OpenRgb;
@@ -35,10 +36,11 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
     private readonly Timer _resend;
     private int _resendStep;
 
-    public LightingController(LightingConfig config, StripWriter? strip, int stripLedCount, ILogger log)
+    public LightingController(LightingConfig config, StripWriter? strip, StripConfig stripConfig, ILogger log)
     {
         _output = new HardwareOutput(strip, log);
-        _engine = new LightingEngine(config, strip is null ? 0 : stripLedCount, strip?.EffectiveMaxFps ?? 30, log);
+        _engine = new LightingEngine(config, strip is null ? 0 : stripConfig.LedCount, strip?.EffectiveMaxFps ?? 30, log,
+            new StripLayout(stripConfig.Layout, stripConfig.LedCount));
         _loop = new RenderLoop(_engine, _output, log);
         _resend = new Timer(_ => OnResend());
     }
@@ -59,6 +61,50 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
     {
         _engine.SetSituation(situation);
         _loop.Wake();
+    }
+
+    /// <inheritdoc cref="LightingEngine.IsScreenWanted"/>
+    public bool IsScreenWanted => _engine.IsScreenWanted;
+
+    public IReadOnlyList<ControllerData> Devices => _engine.Devices;
+
+    /// <summary>What the strip shows right now (live preview in the UI).</summary>
+    public byte[] StripSnapshot() => _output.StripSnapshot();
+
+    public void SetStripLayout(StripLayout layout)
+    {
+        _engine.SetStripLayout(layout);
+        _loop.Wake();
+    }
+
+    /// <summary>Everything off or back on (tray, hotkey).</summary>
+    public void SetAllOff(bool off)
+    {
+        _engine.SetAllOff(off);
+        _loop.Wake();
+    }
+
+    /// <summary>Strip identification pattern on or off.</summary>
+    public void SetStripTest(bool on)
+    {
+        _engine.SetStripTest(on);
+        _loop.Wake();
+    }
+
+    /// <summary>The Agent started (true) or stopped (false) delivering screen colors.</summary>
+    public void SetScreenFeed(bool live)
+    {
+        _engine.SetScreenFeed(live);
+        _loop.Wake();
+    }
+
+    /// <summary>Screen colors from the Agent's frame pipe; written to the strip on the render thread.</summary>
+    public void PushScreenFrame(ReadOnlySpan<RgbColor> colors)
+    {
+        if (_engine.PushScreenFrame(colors))
+        {
+            _loop.Wake();
+        }
     }
 
     /// <summary>Sends black to everything and waits (bounded) until the frame is out; the PC is about to sleep.</summary>
@@ -166,7 +212,39 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
             }
         }
 
-        public void SetStripLeds(ReadOnlySpan<RgbColor> colors) => strip?.SetColors(colors, 100);
+        private readonly Lock _stripGate = new();
+        private RgbColor[] _lastStrip = [];
+
+        public void SetStripLeds(ReadOnlySpan<RgbColor> colors)
+        {
+            strip?.SetColors(colors, 100);
+            lock (_stripGate)
+            {
+                if (_lastStrip.Length != colors.Length)
+                {
+                    _lastStrip = new RgbColor[colors.Length];
+                }
+
+                colors.CopyTo(_lastStrip);
+            }
+        }
+
+        /// <summary>The colors last sent to the strip (brightness applied, before the current limiter), as R,G,B bytes.</summary>
+        public byte[] StripSnapshot()
+        {
+            lock (_stripGate)
+            {
+                var bytes = new byte[_lastStrip.Length * 3];
+                for (var i = 0; i < _lastStrip.Length; i++)
+                {
+                    bytes[i * 3] = _lastStrip[i].R;
+                    bytes[i * 3 + 1] = _lastStrip[i].G;
+                    bytes[i * 3 + 2] = _lastStrip[i].B;
+                }
+
+                return bytes;
+            }
+        }
 
         /// <summary>The supervisor notices the lost connection and reconnects; until then writes are skipped.</summary>
         private void ReportFailure(IOException ex)

@@ -1,0 +1,890 @@
+{
+  "schemaVersion": 2,
+  "strip": {
+    "enabled": true,
+    "portName": null,
+    "usbVendorId": "1A86",
+    "usbProductId": "7523",
+    "ledCount": 133,
+    "baudRate": 115200,
+    "colorOrder": "Rgb",
+    "maxFps": 30,
+    "openSettleMilliseconds": 800,
+    "currentLimitMilliamps": 4500,
+    "keepAliveMilliseconds": 1000,
+    "layout": {
+      "startCorner": "BottomLeft",
+      "clockwise": true,
+      "top": 41,
+      "right": 23,
+      "bottom": 43,
+      "left": 23,
+      "offset": 9,
+      "gaps": [],
+      "edgeLeds": 130
+    }
+  },
+  "openRgb": {
+    "executablePath": "openrgb\\OpenRGB.exe",
+    "host": "127.0.0.1",
+    "port": 6742,
+    "minimumUptimeSeconds": 0,
+    "startupTimeoutSeconds": 30,
+    "deviceSettleMilliseconds": 500,
+    "resumeRescanDelayMilliseconds": 3000,
+    "zoneSizes": [
+      {
+        "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+        "zone": "Aura Addressable 1",
+        "leds": 20
+      },
+      {
+        "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+        "zone": "Aura Addressable 2",
+        "leds": 20
+      },
+      {
+        "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+        "zone": "Aura Addressable 3",
+        "leds": 20
+      }
+    ]
+  },
+  "lighting": {
+    "activeProfile": "Rainbow",
+    "logonProfile": "Logon",
+    "lockProfile": null,
+    "displayOff": {
+      "unlocked": {
+        "strip": true,
+        "devices": []
+      },
+      "locked": {
+        "strip": true,
+        "devices": [
+          "Razer Ornata Chroma V2",
+          "G502 HERO Gaming Mouse"
+        ]
+      }
+    },
+    "defaultGroup": null,
+    "layouts": [
+      {
+        "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+        "zone": "Aura Addressable 1",
+        "segments": [
+          {
+            "leds": null,
+            "shape": "Ring",
+            "vertical": false,
+            "reverse": false,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+        "zone": "Aura Addressable 2",
+        "segments": [
+          {
+            "leds": null,
+            "shape": "Ring",
+            "vertical": false,
+            "reverse": false,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+        "zone": "Aura Addressable 3",
+        "segments": [
+          {
+            "leds": null,
+            "shape": "Ring",
+            "vertical": false,
+            "reverse": false,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "device": "HyperX Predator RGB",
+        "zone": "HyperX Slot 1",
+        "segments": [
+          {
+            "leds": null,
+            "shape": "Line",
+            "vertical": true,
+            "reverse": false,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "device": "HyperX Predator RGB",
+        "zone": "HyperX Slot 2",
+        "segments": [
+          {
+            "leds": null,
+            "shape": "Line",
+            "vertical": true,
+            "reverse": false,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "device": "HyperX Predator RGB",
+        "zone": "HyperX Slot 3",
+        "segments": [
+          {
+            "leds": null,
+            "shape": "Line",
+            "vertical": true,
+            "reverse": false,
+            "offset": 0
+          }
+        ]
+      },
+      {
+        "device": "HyperX Predator RGB",
+        "zone": "HyperX Slot 4",
+        "segments": [
+          {
+            "leds": null,
+            "shape": "Line",
+            "vertical": true,
+            "reverse": false,
+            "offset": 0
+          }
+        ]
+      }
+    ],
+    "groups": [
+      {
+        "name": "Pump + Fans",
+        "members": [
+          {
+            "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+            "zone": "Aura Addressable 1"
+          },
+          {
+            "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+            "zone": "Aura Addressable 2"
+          },
+          {
+            "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+            "zone": "Aura Addressable 3"
+          }
+        ],
+        "maxFps": 30
+      },
+      {
+        "name": "Board",
+        "members": [
+          {
+            "device": "ASUS TUF GAMING H670-PRO WIFI D4",
+            "zone": "Aura Mainboard"
+          }
+        ],
+        "maxFps": 30
+      },
+      {
+        "name": "RAM",
+        "members": [
+          {
+            "device": "HyperX Predator RGB",
+            "zone": null
+          }
+        ],
+        "maxFps": 10
+      },
+      {
+        "name": "Keyboard",
+        "members": [
+          {
+            "device": "Razer Ornata Chroma V2",
+            "zone": null
+          }
+        ],
+        "maxFps": 30
+      },
+      {
+        "name": "Mouse",
+        "members": [
+          {
+            "device": "G502 HERO Gaming Mouse",
+            "zone": null
+          }
+        ],
+        "maxFps": 15
+      },
+      {
+        "name": "GPU",
+        "members": [
+          {
+            "device": "Gigabyte GeForce RTX 3080 12G Gaming OC",
+            "zone": null
+          }
+        ],
+        "maxFps": 10
+      }
+    ],
+    "palettes": [
+      {
+        "name": "Rainbow",
+        "stops": [
+          {
+            "position": 0,
+            "color": "#FF0000"
+          },
+          {
+            "position": 0.1667,
+            "color": "#FFFF00"
+          },
+          {
+            "position": 0.3333,
+            "color": "#00FF00"
+          },
+          {
+            "position": 0.5,
+            "color": "#00FFFF"
+          },
+          {
+            "position": 0.6667,
+            "color": "#0000FF"
+          },
+          {
+            "position": 0.8333,
+            "color": "#FF00FF"
+          }
+        ]
+      },
+      {
+        "name": "Cyberpunk",
+        "stops": [
+          {
+            "position": 0,
+            "color": "#FF00A0"
+          },
+          {
+            "position": 0.3333,
+            "color": "#00E5FF"
+          },
+          {
+            "position": 0.6667,
+            "color": "#8A2BE2"
+          }
+        ]
+      },
+      {
+        "name": "Aurora",
+        "stops": [
+          {
+            "position": 0,
+            "color": "#00C9A7"
+          },
+          {
+            "position": 0.25,
+            "color": "#2BFF88"
+          },
+          {
+            "position": 0.5,
+            "color": "#00A3FF"
+          },
+          {
+            "position": 0.75,
+            "color": "#7B2FF7"
+          }
+        ]
+      },
+      {
+        "name": "Ember",
+        "stops": [
+          {
+            "position": 0,
+            "color": "#FF7A1A"
+          },
+          {
+            "position": 0.5,
+            "color": "#FF4A10"
+          }
+        ]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "Rainbow",
+        "masterBrightnessPercent": 100,
+        "groups": [
+          {
+            "group": "Pump + Fans",
+            "effect": "Radial",
+            "palette": "Rainbow",
+            "speed": 0.25,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Board",
+            "effect": "ColorCycle",
+            "palette": "Rainbow",
+            "speed": 0.1,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "RAM",
+            "effect": "Mirror",
+            "palette": "Rainbow",
+            "speed": 0.08,
+            "angle": 90,
+            "reverse": false,
+            "scale": 0.3,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Keyboard",
+            "effect": "Wave",
+            "palette": "Rainbow",
+            "speed": 0.25,
+            "angle": 180,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Mouse",
+            "effect": "ColorCycle",
+            "palette": "Rainbow",
+            "speed": 0.1,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "GPU",
+            "effect": "ColorCycle",
+            "palette": "Rainbow",
+            "speed": 0.1,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          }
+        ],
+        "ambilight": {
+          "mode": "Screen",
+          "fallback": "Radial",
+          "brightnessPercent": 100,
+          "solidColor": "#FFFFFF",
+          "solidBrightnessPercent": 100,
+          "palette": "Rainbow",
+          "speed": 0.1
+        }
+      },
+      {
+        "name": "Cyberpunk",
+        "masterBrightnessPercent": 100,
+        "groups": [
+          {
+            "group": "Pump + Fans",
+            "effect": "Radial",
+            "palette": "Cyberpunk",
+            "speed": 0.15,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Board",
+            "effect": "ColorCycle",
+            "palette": "Cyberpunk",
+            "speed": 0.06,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "RAM",
+            "effect": "Mirror",
+            "palette": "Cyberpunk",
+            "speed": 0.18,
+            "angle": 90,
+            "reverse": false,
+            "scale": 0.5,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Keyboard",
+            "effect": "Wave",
+            "palette": "Cyberpunk",
+            "speed": 0.15,
+            "angle": 180,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Mouse",
+            "effect": "ColorCycle",
+            "palette": "Cyberpunk",
+            "speed": 0.06,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "GPU",
+            "effect": "ColorCycle",
+            "palette": "Cyberpunk",
+            "speed": 0.06,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          }
+        ],
+        "ambilight": {
+          "mode": "Screen",
+          "fallback": "Radial",
+          "brightnessPercent": 100,
+          "solidColor": "#FFFFFF",
+          "solidBrightnessPercent": 100,
+          "palette": "Rainbow",
+          "speed": 0.1
+        }
+      },
+      {
+        "name": "Aurora",
+        "masterBrightnessPercent": 100,
+        "groups": [
+          {
+            "group": "Pump + Fans",
+            "effect": "Aurora",
+            "palette": "Aurora",
+            "speed": 0.05,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Board",
+            "effect": "Aurora",
+            "palette": "Aurora",
+            "speed": 0.05,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "RAM",
+            "effect": "Aurora",
+            "palette": "Aurora",
+            "speed": 0.05,
+            "angle": 90,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Keyboard",
+            "effect": "Aurora",
+            "palette": "Aurora",
+            "speed": 0.05,
+            "angle": 180,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Mouse",
+            "effect": "Aurora",
+            "palette": "Aurora",
+            "speed": 0.05,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "GPU",
+            "effect": "Aurora",
+            "palette": "Aurora",
+            "speed": 0.05,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          }
+        ],
+        "ambilight": {
+          "mode": "Screen",
+          "fallback": "Radial",
+          "brightnessPercent": 100,
+          "solidColor": "#FFFFFF",
+          "solidBrightnessPercent": 100,
+          "palette": "Aurora",
+          "speed": 0.03
+        }
+      },
+      {
+        "name": "Night",
+        "masterBrightnessPercent": 100,
+        "groups": [
+          {
+            "group": "Pump + Fans",
+            "effect": "Static",
+            "palette": "#FF5A14",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 20,
+            "hardwareMode": null
+          },
+          {
+            "group": "Board",
+            "effect": "Off",
+            "palette": "Rainbow",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "RAM",
+            "effect": "Static",
+            "palette": "#FF5A14",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 15,
+            "hardwareMode": null
+          },
+          {
+            "group": "Keyboard",
+            "effect": "Static",
+            "palette": "#FF7A1A",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 25,
+            "hardwareMode": null
+          },
+          {
+            "group": "Mouse",
+            "effect": "Off",
+            "palette": "Rainbow",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "GPU",
+            "effect": "Off",
+            "palette": "Rainbow",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          }
+        ],
+        "ambilight": {
+          "mode": "Solid",
+          "fallback": "Radial",
+          "brightnessPercent": 100,
+          "solidColor": "#FF8C3A",
+          "solidBrightnessPercent": 15,
+          "palette": "Rainbow",
+          "speed": 0.1
+        }
+      },
+      {
+        "name": "Solid White",
+        "masterBrightnessPercent": 100,
+        "groups": [
+          {
+            "group": "Pump + Fans",
+            "effect": "Static",
+            "palette": "#FFFFFF",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Board",
+            "effect": "Static",
+            "palette": "#FFFFFF",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "RAM",
+            "effect": "Static",
+            "palette": "#FFFFFF",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Keyboard",
+            "effect": "Static",
+            "palette": "#FFFFFF",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Mouse",
+            "effect": "Static",
+            "palette": "#FFFFFF",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "GPU",
+            "effect": "Static",
+            "palette": "#FFFFFF",
+            "speed": 0.2,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          }
+        ],
+        "ambilight": {
+          "mode": "Solid",
+          "fallback": "Radial",
+          "brightnessPercent": 100,
+          "solidColor": "#FFFFFF",
+          "solidBrightnessPercent": 100,
+          "palette": "Rainbow",
+          "speed": 0.1
+        }
+      },
+      {
+        "name": "Logon",
+        "masterBrightnessPercent": 100,
+        "groups": [
+          {
+            "group": "Pump + Fans",
+            "effect": "Radial",
+            "palette": "Rainbow",
+            "speed": 0.125,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Board",
+            "effect": "ColorCycle",
+            "palette": "Rainbow",
+            "speed": 0.05,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "RAM",
+            "effect": "Mirror",
+            "palette": "Rainbow",
+            "speed": 0.15,
+            "angle": 90,
+            "reverse": false,
+            "scale": 0.5,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Keyboard",
+            "effect": "Wave",
+            "palette": "Rainbow",
+            "speed": 0.125,
+            "angle": 180,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "Mouse",
+            "effect": "ColorCycle",
+            "palette": "Rainbow",
+            "speed": 0.05,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          },
+          {
+            "group": "GPU",
+            "effect": "ColorCycle",
+            "palette": "Rainbow",
+            "speed": 0.05,
+            "angle": 0,
+            "reverse": false,
+            "scale": 1,
+            "radialMode": "Rotate",
+            "brightnessPercent": 100,
+            "hardwareMode": null
+          }
+        ],
+        "ambilight": {
+          "mode": "Radial",
+          "fallback": "Radial",
+          "brightnessPercent": 100,
+          "solidColor": "#FFFFFF",
+          "solidBrightnessPercent": 100,
+          "palette": "Rainbow",
+          "speed": 0.1
+        }
+      }
+    ]
+  },
+  "capture": {
+    "monitor": null,
+    "captureFps": 30,
+    "outputFps": 30,
+    "minimumSampleWidth": 320,
+    "edgeDepthCm": 2.5,
+    "screenWidthCm": 0,
+    "segmentOverlapPercent": 30,
+    "blackThreshold": 10,
+    "blackKnee": 10,
+    "gamma": 2,
+    "saturation": 1,
+    "attackMilliseconds": 40,
+    "releaseMilliseconds": 120,
+    "blackReleaseMilliseconds": 60,
+    "letterboxDetection": true,
+    "letterboxStableMilliseconds": 1500,
+    "hdrSdrWhiteNits": 0,
+    "fallbackGraceMilliseconds": 1500,
+    "fadeInMilliseconds": 800
+  },
+  "hotkeys": {
+    "bindings": [
+      {
+        "keys": "Ctrl+F9",
+        "action": "StripSolidToggle",
+        "profile": null
+      },
+      {
+        "keys": "Ctrl+F10",
+        "action": "CycleStripMode",
+        "profile": null
+      },
+      {
+        "keys": "Ctrl+F11",
+        "action": "StripBrightnessDown",
+        "profile": null
+      },
+      {
+        "keys": "Ctrl+F12",
+        "action": "StripBrightnessUp",
+        "profile": null
+      }
+    ],
+    "brightnessStepPercent": 10
+  },
+  "logging": {
+    "minimumLevel": "Information"
+  }
+}

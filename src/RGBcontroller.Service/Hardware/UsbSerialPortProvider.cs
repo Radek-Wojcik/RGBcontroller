@@ -63,7 +63,22 @@ internal sealed class SerialStripTransport : IStripTransport
 
     public void Write(ReadOnlySpan<byte> frame) => _port.BaseStream.Write(frame);
 
-    public void Flush() => _port.BaseStream.Flush();
+    /// <summary>Flushes and waits (bounded) until the driver's transmit queue is empty.</summary>
+    public void Flush()
+    {
+        _port.BaseStream.Flush();
+        var deadline = Environment.TickCount64 + 1000;
+        while (_port.BytesToWrite > 0 && Environment.TickCount64 < deadline)
+        {
+            Thread.Sleep(5);
+        }
+    }
+
+    public int ReadAvailable(Span<byte> buffer)
+    {
+        var available = _port.BytesToRead;
+        return available == 0 ? 0 : _port.BaseStream.Read(buffer[..Math.Min(available, buffer.Length)]);
+    }
 
     public void Dispose() => _port.Dispose();
 }

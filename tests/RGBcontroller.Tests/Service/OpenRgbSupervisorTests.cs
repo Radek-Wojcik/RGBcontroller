@@ -140,6 +140,35 @@ public sealed class OpenRgbSupervisorTests
     }
 
     [Fact]
+    public async Task UsbArrivals_AreDebouncedIntoOneRescanThatRelightsTheDevices()
+    {
+        // The keyboard and mouse hang on the monitor's USB hub; when it powers on they come back in factory colors.
+        var keyboard = ControllerDataWriter.Keyboard();
+        var mouse = ControllerDataWriter.Mouse();
+        await using var server = new FakeOpenRgbServer(5, keyboard);
+        await using var run = Start(server, out var supervisor, out var launcher,
+            FastTimings with { HotPlugSettle = TimeSpan.FromMilliseconds(200) });
+        var applied = new System.Collections.Concurrent.ConcurrentQueue<int>();
+        await WaitUntilAsync(() => server.UpdateModeRequests.Count == 1);
+        supervisor.DevicesApplied += applied.Enqueue;
+
+        server.Controllers = [keyboard, mouse];
+        supervisor.NotifyUsbDeviceArrived();
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        supervisor.NotifyUsbDeviceArrived();
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        supervisor.NotifyUsbDeviceArrived();
+        Assert.Equal(0, Volatile.Read(ref server.RescanRequests));
+
+        await WaitUntilAsync(() => !applied.IsEmpty);
+        await Task.Delay(400, TestContext.Current.CancellationToken);
+        Assert.Equal(1, Volatile.Read(ref server.RescanRequests));
+        Assert.Equal([2], applied);
+        Assert.Equal(3, server.UpdateModeRequests.Count);
+        Assert.Equal(1, launcher.Starts);
+    }
+
+    [Fact]
     public async Task Resume_WaitsForAllDevicesBeforeLighting()
     {
         // O4: a real rescan reports devices in bursts (0, then 2, then 5); lighting must start once, with all of them.
@@ -233,7 +262,7 @@ public sealed class OpenRgbSupervisorTests
     {
         launcher = new FakeLauncher();
         var config = new OpenRgbConfig { Port = server.Port, DeviceSettleMilliseconds = 100, ResumeRescanDelayMilliseconds = 50 };
-        var lighting = new LightingController(StaticCyan, strip: null, stripLedCount: 0, Logger.None);
+        var lighting = new LightingController(StaticCyan, strip: null, new StripConfig(), Logger.None);
         lighting.Start();
         supervisor = new OpenRgbSupervisor(launcher, config, lighting, new StartupClock(), Logger.None, timings ?? FastTimings);
         return new RunningSupervisor(supervisor, lighting);

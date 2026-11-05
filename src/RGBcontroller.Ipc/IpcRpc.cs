@@ -10,9 +10,18 @@ public static class IpcRpc
     public static IJsonRpcMessageFormatter CreateFormatter()
     {
         var formatter = new SystemTextJsonFormatter();
-        formatter.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-        formatter.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        Configure(formatter.JsonSerializerOptions);
         return formatter;
+    }
+
+    /// <summary>Options matching the wire format (camelCase, enums as strings); the UI bridge uses them for the web page.</summary>
+    public static JsonSerializerOptions CreateJsonOptions() => Configure(new JsonSerializerOptions());
+
+    private static JsonSerializerOptions Configure(JsonSerializerOptions options)
+    {
+        options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
     }
 
     /// <summary>Creates an RPC connection over a duplex stream (a named pipe in production). Call StartListening after attaching targets.</summary>

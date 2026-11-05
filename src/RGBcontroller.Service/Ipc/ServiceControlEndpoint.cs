@@ -1,3 +1,4 @@
+using RGBcontroller.Core.Config;
 using RGBcontroller.Ipc;
 
 namespace RGBcontroller.Service.Ipc;
@@ -14,10 +15,38 @@ internal interface IControllableHost
 
     /// <returns>Null on success, otherwise a message for the client.</returns>
     string? TuneGroup(GroupTuningRequest request);
+
+    AgentState GetAgentState();
+
+    AgentSettings GetAgentSettings();
+
+    /// <returns>Null on success, otherwise a message for the client.</returns>
+    string? ChangeStrip(StripChangeRequest request);
+
+    void SetAllOff(bool off);
+
+    /// <returns>Null on success, otherwise a message for the client.</returns>
+    string? StepProfile(int delta);
+
+    void ShowStripTest(TimeSpan duration);
+
+    ConfigSnapshot GetConfig();
+
+    ConfigUpdateResult UpdateConfig(long expectedRevision, AppConfig config);
+
+    DeviceList GetDevices();
+
+    StripColors GetStripColors();
 }
 
-/// <summary>Validates IPC input and forwards it to the host. Runs on StreamJsonRpc threads.</summary>
-internal sealed class ServiceControlEndpoint(IControllableHost host) : IServiceControl
+/// <summary>The control connection a request arrived on; subscribing makes the server push state changes to it.</summary>
+internal interface IStateSubscription
+{
+    void Subscribe();
+}
+
+/// <summary>Validates IPC input and forwards it to the host. One instance per connection; runs on StreamJsonRpc threads.</summary>
+internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubscription? subscription = null) : IServiceControl
 {
     public const int MaxNameLength = 100;
 
@@ -70,4 +99,82 @@ internal sealed class ServiceControlEndpoint(IControllableHost host) : IServiceC
     }
 
     private static bool IsName(string? name) => !string.IsNullOrWhiteSpace(name) && name.Length <= MaxNameLength;
+
+    public Task<AgentState> SubscribeAsync(CancellationToken cancellationToken)
+    {
+        subscription?.Subscribe();
+        return Task.FromResult(host.GetAgentState());
+    }
+
+    public Task<AgentSettings> GetAgentSettingsAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetAgentSettings());
+
+    public Task<CommandResult> ChangeStripAsync(StripChangeRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Mode is { } mode && !Enum.IsDefined(mode))
+        {
+            return Task.FromResult(new CommandResult(false, $"Unknown strip mode {mode}."));
+        }
+
+        if (request.BrightnessPercent is < 0 or > 100 || request.BrightnessDelta is < -100 or > 100)
+        {
+            return Task.FromResult(new CommandResult(false, "Brightness is 0-100 and a step -100 to 100."));
+        }
+
+        var error = host.ChangeStrip(request);
+        return Task.FromResult(new CommandResult(error is null, error));
+    }
+
+    public Task<CommandResult> SetAllOffAsync(bool off, CancellationToken cancellationToken)
+    {
+        host.SetAllOff(off);
+        return Task.FromResult(new CommandResult(true, null));
+    }
+
+    public Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken)
+    {
+        if (seconds is < 0 or > 600)
+        {
+            return Task.FromResult(new CommandResult(false, "The strip test lasts 0-600 seconds."));
+        }
+
+        host.ShowStripTest(TimeSpan.FromSeconds(seconds));
+        return Task.FromResult(new CommandResult(true, null));
+    }
+
+    public Task<ConfigSnapshot> GetConfigAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetConfig());
+
+    public Task<ConfigUpdateResult> UpdateConfigAsync(ConfigUpdateRequest request, CancellationToken cancellationToken)
+    {
+        // A JSON payload can leave any member null despite the non-nullable types; the validator expects whole objects.
+        if (request?.Config is not { } config || config.Strip?.Layout is null || config.OpenRgb is null || config.Lighting is null
+            || config.Capture is null || config.Hotkeys is null || config.Logging is null)
+        {
+            return Task.FromResult(new ConfigUpdateResult(false, "The configuration is incomplete.", 0, [], false));
+        }
+
+        try
+        {
+            return Task.FromResult(host.UpdateConfig(request.ExpectedRevision, config));
+        }
+        catch (NullReferenceException)
+        {
+            return Task.FromResult(new ConfigUpdateResult(false, "The configuration is incomplete.", 0, [], false));
+        }
+    }
+
+    public Task<DeviceList> GetDevicesAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetDevices());
+
+    public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetStripColors());
+
+    public Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken)
+    {
+        if (delta is < -100 or > 100)
+        {
+            return Task.FromResult(new CommandResult(false, "A profile step is -100 to 100."));
+        }
+
+        var error = host.StepProfile(delta);
+        return Task.FromResult(new CommandResult(error is null, error));
+    }
 }
