@@ -2,7 +2,7 @@
 
 Windows controller for PC RGB lighting and an Adalight ambilight strip: synchronized effects on every OpenRGB device, a screen-mirroring strip behind the monitor, and a background service that replaces OpenRGB's Effects plugin (about 2.6% CPU).
 
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![React 19](https://img.shields.io/badge/UI-React_19_%2B_WebView2-149ECA) ![Status: stage 5 of 6](https://img.shields.io/badge/status-stage_5_of_6-orange)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![React 19](https://img.shields.io/badge/UI-React_19_%2B_WebView2-149ECA) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Status: stage 5 of 6](https://img.shields.io/badge/status-stage_5_of_6-orange)
 
 <img src="docs/assets/ui-dashboard.png" alt="Dashboard: the ambilight tile draws the strip's 133 LEDs around the monitor in their live colors; tiles for pump and fans, board, RAM, keyboard, mouse and GPU set effect, palette, speed, wave length, brightness and frame rate" width="900">
 
@@ -189,7 +189,6 @@ ui/                        React + TypeScript front end (Vite)
 tests/RGBcontroller.Tests/ unit tests with a fake OpenRGB SDK server and a fake serial port
 tools/                     pinned OpenRGB copy, front end build, icon, CPU and time-to-first-light measurement
 docs/                      handoff, spike reports with hardware results, screenshots
-reference/                 verified hardware evidence (test scripts, measurements)
 ```
 
 ## Testing
@@ -213,7 +212,7 @@ Each stage ends with a hardware test gate on the target PC.
 
 ## License
 
-All rights reserved. No license is granted to use, copy or modify this code.
+MIT; see [LICENSE](LICENSE). OpenRGB is a separate project under its own license and is not part of this repository.
 
 ## Author
 

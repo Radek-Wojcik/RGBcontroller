@@ -49,3 +49,6 @@ Desktop.ini
 
 # Local preview server config of the Claude desktop app (machine paths)
 .claude/launch.json
+
+# Local hardware evidence (owner machine details), kept out of the public repo
+reference/
