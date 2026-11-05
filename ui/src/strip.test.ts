@@ -72,3 +72,15 @@ describe("config edits", () => {
     expect(paletteCss(config.lighting.palettes, "Rainbow")).toMatch(/^linear-gradient\(90deg, .* 100%\)$/);
   });
 });
+
+describe("bridge", () => {
+  it("replays the latest connection and state to a late subscriber", async () => {
+    const { Bridge } = await import("./bridge");
+    let deliver: (m: string) => void = () => {};
+    const bridge = new Bridge({ post: () => {}, onMessage: l => (deliver = l) });
+    deliver(JSON.stringify({ event: "connection", data: { connected: true, version: "1", error: null } }));
+    const seen: string[] = [];
+    bridge.subscribe(e => seen.push(e.event));
+    expect(seen).toEqual(["connection"]);
+  });
+});
