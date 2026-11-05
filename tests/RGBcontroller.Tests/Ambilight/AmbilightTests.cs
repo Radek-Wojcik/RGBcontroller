@@ -164,8 +164,8 @@ public sealed class AmbilightPipelineTests
 
         pipeline.OnImage(new TestImage(64, 36).Fill((_, _) => new RgbColor(64, 64, 64)).View(), TimeSpan.Zero);
         pipeline.Step(TimeSpan.FromMilliseconds(33));
-        // Gamma 2.0: a quarter-bright grey becomes about 1/16.
-        Assert.InRange(pipeline.Output[0].R, 14, 18);
+        // Gamma 1.5: a quarter-bright grey becomes about 1/8, still dark.
+        Assert.InRange(pipeline.Output[0].R, 30, 34);
     }
 
     [Fact]
@@ -240,6 +240,36 @@ public sealed class LetterboxDetectorTests
 
         Assert.Equal(new ContentRect(0, 12, 200, 88), detector.Update(Letterboxed(12, subtitles: true).View(), 1, TimeSpan.FromSeconds(1)));
         Assert.Equal(new ContentRect(0, 12, 200, 88), detector.Update(new TestImage(200, 100).View(), 1, TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public void PlayerOverlaysOnAPillarboxDoNotHideIt()
+    {
+        // A 4:3 film in a fullscreen player: the title runs over the left bar, the progress bar and buttons cross both bars.
+        var detector = new LetterboxDetector(TimeSpan.Zero);
+        var image = new TestImage(200, 100).Fill((x, y) =>
+            y is >= 2 and < 5 && x < 120 ? new RgbColor(255, 255, 255)
+            : y is >= 92 and < 96 ? new RgbColor(230, 30, 30)
+            : x is < 25 or >= 175 ? default : new RgbColor(120, 90, 160));
+
+        detector.Update(image.View(), 1, TimeSpan.Zero);
+
+        Assert.Equal(new ContentRect(24, 0, 176, 100), detector.Update(image.View(), 1, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void ALogoInTheBottomBarDoesNotHideTheLetterbox()
+    {
+        // A 2.39:1 clip whose bottom bar carries a channel logo in its left quarter.
+        var detector = new LetterboxDetector(TimeSpan.Zero);
+        var image = new TestImage(200, 100).Fill((x, y) =>
+            y < 12 ? default
+            : y >= 88 ? x is >= 6 and < 50 && y is >= 91 and < 97 ? new RgbColor(255, 255, 255) : default
+            : new RgbColor(90, 140, 60));
+
+        detector.Update(image.View(), 1, TimeSpan.Zero);
+
+        Assert.Equal(new ContentRect(0, 12, 200, 88), detector.Update(image.View(), 1, TimeSpan.Zero));
     }
 
     [Fact]

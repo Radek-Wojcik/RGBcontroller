@@ -3,9 +3,11 @@ namespace RGBcontroller.Core.Ambilight;
 /// <summary>
 /// Finds black bars (letterbox above and below, pillarbox at the sides) on the downscaled frame so the sampled bands
 /// move into the picture (SPEC 6.2). Cheap: a few sparse rows and columns per frame. Bars are taken symmetric (the
-/// smaller of both sides), rows are judged on their outer quarters only so centered subtitles inside a bar do not
-/// count as picture, and a new result must hold for the stable time before it is used (hysteresis). A nearly black
-/// frame says nothing about bars and keeps the current result.
+/// smaller of both sides). A row or column belongs to a bar when at least <see cref="BarShare"/> of its samples are
+/// black, so things drawn on a bar do not count as picture: subtitles, a channel logo in the bottom bar, the video
+/// title and the progress bar of a fullscreen player over a pillarbox (stage 4 gate: a 4:3 film kept the sides dark,
+/// a 2.39:1 clip with a logo in its bottom bar kept the top dark). A new result must hold for the stable time before
+/// it is used (hysteresis). A nearly black frame says nothing about bars and keeps the current result.
 /// </summary>
 public sealed class LetterboxDetector(TimeSpan stableTime)
 {
@@ -17,6 +19,9 @@ public sealed class LetterboxDetector(TimeSpan stableTime)
 
     /// <summary>Bars never cover more than this share of the height (width) per side.</summary>
     private const double MaximumBar = 0.3;
+
+    /// <summary>Share of black samples that makes a row or column part of a bar.</summary>
+    public const double BarShare = 0.75;
 
     private static readonly float LinearBarBlack = ColorMath.SrgbToLinear(BarBlack / 255);
 
@@ -78,11 +83,9 @@ public sealed class LetterboxDetector(TimeSpan stableTime)
 
     private static int CountDarkRows(in ScreenImage image, int start, int direction, int max, float threshold)
     {
-        var quarter = image.Width / 4;
         for (var i = 0; i < max; i++)
         {
-            var y = start + i * direction;
-            if (!IsDarkRun(image, y, 0, quarter, threshold) || !IsDarkRun(image, y, image.Width - quarter, image.Width, threshold))
+            if (!IsDarkRow(image, start + i * direction, threshold))
             {
                 return i;
             }
@@ -104,30 +107,32 @@ public sealed class LetterboxDetector(TimeSpan stableTime)
         return max;
     }
 
-    private static bool IsDarkRun(in ScreenImage image, int y, int x0, int x1, float threshold)
+    private static bool IsDarkRow(in ScreenImage image, int y, float threshold)
     {
-        for (var x = x0; x < x1; x += 2)
+        int samples = 0, dark = 0;
+        for (var x = 0; x < image.Width; x += 2, samples++)
         {
-            if (Max(image.Raw(x, y)) > threshold)
+            if (Max(image.Raw(x, y)) <= threshold)
             {
-                return false;
+                dark++;
             }
         }
 
-        return true;
+        return dark >= samples * BarShare;
     }
 
     private static bool IsDarkColumn(in ScreenImage image, int x, float threshold)
     {
-        for (var y = 0; y < image.Height; y += 2)
+        int samples = 0, dark = 0;
+        for (var y = 0; y < image.Height; y += 2, samples++)
         {
-            if (Max(image.Raw(x, y)) > threshold)
+            if (Max(image.Raw(x, y)) <= threshold)
             {
-                return false;
+                dark++;
             }
         }
 
-        return true;
+        return dark >= samples * BarShare;
     }
 
     private static float Max(System.Numerics.Vector3 c) => Math.Max(c.X, Math.Max(c.Y, c.Z));
