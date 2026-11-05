@@ -11,6 +11,26 @@ export interface StripLed { edge: Edge; x: number; y: number }
  * Keep the two in step; strip.test.ts pins the same cases as the C# tests.
  */
 export function placeStrip(config: StripLayoutConfig, ledCount: number): (StripLed | null)[] {
+  const path = buildPath(config);
+  const gaps = new Set(config.gaps);
+  const leds: (StripLed | null)[] = [];
+  let k = 0;
+  for (let led = 0; led < ledCount; led++) {
+    if (gaps.has(led) || path.length === 0) {
+      leds.push(null);
+      if (!gaps.has(led)) k++;
+      continue;
+    }
+
+    leds.push(path[(((k + config.offset) % path.length) + path.length) % path.length]);
+    k++;
+  }
+
+  return leds;
+}
+
+/** The slots around the screen from the start corner in the strip's direction (top, right, bottom, left counts). */
+export function buildPath(config: StripLayoutConfig): StripLed[] {
   const clockwiseOrder: Edge[] = ["Top", "Right", "Bottom", "Left"];
   const first = config.clockwise
     ? { TopLeft: 0, TopRight: 1, BottomRight: 2, BottomLeft: 3 }[config.startCorner]
@@ -34,21 +54,30 @@ export function placeStrip(config: StripLayoutConfig, ledCount: number): (StripL
     }
   }
 
-  const gaps = new Set(config.gaps);
-  const leds: (StripLed | null)[] = [];
-  let k = 0;
-  for (let led = 0; led < ledCount; led++) {
-    if (gaps.has(led) || path.length === 0) {
-      leds.push(null);
-      if (!gaps.has(led)) k++;
-      continue;
+  return path;
+}
+
+/** Slot on the path nearest to a point (0..1 over the screen); the offset that puts the first LED there. */
+export function nearestSlot(config: StripLayoutConfig, x: number, y: number): number {
+  const path = buildPath(config);
+  let best = 0;
+  let distance = Infinity;
+  path.forEach((slot, i) => {
+    const d = (slot.x - x) ** 2 + (slot.y - y) ** 2;
+    if (d < distance) {
+      distance = d;
+      best = i;
     }
+  });
+  return best;
+}
 
-    leds.push(path[(((k + config.offset) % path.length) + path.length) % path.length]);
-    k++;
-  }
-
-  return leds;
+/** Strip colors from the Service: base64 R,G,B per LED. */
+export function decodeColors(base64: string): Uint8Array {
+  const text = atob(base64);
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+  return bytes;
 }
 
 /** Hue in degrees of a point around the screen center (the Radial mode look; 0 at the right, clockwise). */

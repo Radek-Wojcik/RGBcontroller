@@ -1,7 +1,8 @@
 import { bridge } from "../bridge";
 import { findProfile } from "../config";
 import { useStore } from "../store";
-import { StripView } from "../StripView";
+import { nearestSlot } from "../strip";
+import { StripView, useStripColors } from "../StripView";
 import type { ScreenCaptureConfig, StripCorner, StripLayoutConfig } from "../types";
 import { Empty, NumberField, Panel, Segmented, Select, Toggle } from "../ui";
 
@@ -11,6 +12,7 @@ const CORNER_LABELS: Record<StripCorner, string> = { TopLeft: "Top left", TopRig
 /** Strip layout (by numbers until the wizard of SPEC 7.5 lands) and the capture pipeline of SPEC 6.2. */
 export function Ambilight() {
   const { state, snapshot, editConfig, run } = useStore();
+  const live = useStripColors();
   if (!state || !snapshot) return <Empty>Waiting for the Service...</Empty>;
   const config = snapshot.config;
   const layout = config.strip.layout;
@@ -25,12 +27,17 @@ export function Ambilight() {
     <div className="tiles">
       <Panel wide tall title="Strip layout" meta={<span className="num">{config.strip.ledCount} LED · {placed} on the edges</span>}>
         <div className="ambilight">
-          <StripView layout={layout} ledCount={config.strip.ledCount} mode={a?.mode === "Solid" ? "Solid" : "Radial"}
-            solidColor={a?.solidColor ?? "#FFFFFF"} brightness={100} speed={0.1} />
+          <StripView layout={layout} ledCount={config.strip.ledCount} mode={state.allOff ? "Off" : a?.mode ?? "Off"}
+            solidColor={a?.solidColor ?? "#FFFFFF"} brightness={state.stripBrightnessPercent} speed={a?.speed ?? 0.1} live={live}
+            onPick={(x, y) => {
+              const offset = nearestSlot(layout, x, y);
+              if (offset !== layout.offset) void setLayout({ offset });
+            }} />
           <div className="controls">
             <p className="dim">
-              The ringed LED is the first one (data input). Use the test pattern: the first 3 LEDs light green, the
-              last 3 red and every 10th white; then match the drawing. The guided wizard comes next.
+              <b>Click the outline where your strip's first LED sits</b> (the end with the cable from the LED box); the
+              ringed LED moves there. Then pick the direction the strip runs. The test pattern helps: the first 3 LEDs
+              light green, the last 3 red, every 10th white.
             </p>
             <div className="row">
               <Select label="First LED near" value={layout.startCorner} options={CORNERS.map(c => ({ value: c, label: CORNER_LABELS[c] }))}
@@ -48,9 +55,10 @@ export function Ambilight() {
               <NumberField label="Left" value={layout.left} min={0} max={1024} onCommit={left => setLayout({ left })} />
             </div>
             <div className="row">
-              <NumberField label="Offset along the path" value={layout.offset} min={-1024} max={1024} unit="LED" onCommit={offset => setLayout({ offset })} />
+              <NumberField label="First LED: slots from the corner" value={layout.offset} min={-1024} max={1024} unit="LED"
+                onCommit={offset => setLayout({ offset })} />
               <div className="field">
-                <label htmlFor="gaps">Dark LEDs (indices)</label>
+                <label htmlFor="gaps">LEDs kept dark (numbers)</label>
                 <input id="gaps" defaultValue={layout.gaps.join(", ")} key={layout.gaps.join(",")}
                   onBlur={e => {
                     const gaps = e.target.value.split(/[\s,;]+/).filter(Boolean).map(Number).filter(n => Number.isInteger(n) && n >= 0);
@@ -58,6 +66,12 @@ export function Ambilight() {
                   }} />
               </div>
             </div>
+            <p className="dim">
+              <b>First LED</b>: how many LED places from the start corner, in the strip's direction, the first LED
+              sits; clicking the outline sets it for you. <b>LEDs kept dark</b>: LED numbers (0 is the first LED,
+              comma separated) that never light and take no place around the screen, e.g. LEDs hidden behind the
+              monitor stand.
+            </p>
             <div className="row buttons">
               <button onClick={() => run(() => bridge.call("showStripTest", { seconds: 60 }))}>Show test pattern (60 s)</button>
               <button onClick={() => run(() => bridge.call("showStripTest", { seconds: 0 }))}>End test</button>

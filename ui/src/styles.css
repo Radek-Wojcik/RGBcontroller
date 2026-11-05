@@ -269,3 +269,20 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .notice.error { border-left-color: var(--bad); }
 .notice span { flex: 1; }
 .notice button { height: 22px; padding: 0 8px; }
+
+/* ---------- strip preview: brand in the screen, picking ---------- */
+
+.stripview.pickable { cursor: crosshair; }
+.stripview .led title, .stripview .led-start title { pointer-events: none; }
+.screen-brand {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  color: var(--dim); font: 600 13px/1 var(--head); letter-spacing: 0.18em; pointer-events: none;
+}
+.screen-brand .mark {
+  width: 46px; height: 46px; opacity: 0.9;
+  background: conic-gradient(from 90deg, #ff2b2b, #ffd400, #2bff88, #00e5ff, #6a5cff, #ff2bd6, #ff2b2b);
+  clip-path: polygon(30% 0, 100% 0, 100% 70%, 70% 100%, 0 100%, 0 30%);
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 40%, transparent));
+}
+.screen-brand .name b { color: var(--accent); font-weight: 600; }
+.screen-brand .mode { font: 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
