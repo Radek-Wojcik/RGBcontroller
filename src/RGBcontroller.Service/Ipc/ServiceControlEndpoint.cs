@@ -38,6 +38,8 @@ internal interface IControllableHost
 
     StripColors GetStripColors();
 
+    IReadOnlyList<DeviceColors> GetDeviceColors();
+
     /// <returns>Null on success, otherwise a message for the client.</returns>
     string? ReopenStrip();
 }
@@ -169,6 +171,8 @@ internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubsc
     public Task<DeviceList> GetDevicesAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetDevices());
 
     public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetStripColors());
+
+    public Task<IReadOnlyList<DeviceColors>> GetDeviceColorsAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetDeviceColors());
 
     public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken)
     {
