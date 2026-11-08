@@ -98,6 +98,16 @@ export function createMockHost(): Host {
       return { success: true, message: null, revision, errors: [], restartRequired: restart };
     },
     getDevices: () => devices,
+    getDeviceColors: () => devices.devices.map(d => {
+      const n = d.zones.reduce((sum, z) => sum + z.ledCount, 0);
+      const bytes = new Uint8Array(n * 3);
+      const t = Date.now() / 4000 + d.index / 5;
+      for (let i = 0; i < n; i++) {
+        const h = ((i / Math.max(1, n) + t) % 1) * Math.PI * 2;
+        bytes.set([127 + 127 * Math.sin(h), 127 + 127 * Math.sin(h + 2.1), 127 + 127 * Math.sin(h + 4.2)], i * 3);
+      }
+      return { index: d.index, rgb: btoa(String.fromCharCode(...bytes)) };
+    }),
     getStripColors: () => {
       // A slowly turning rainbow, so the live preview can be designed without the Service.
       const n = config.strip.ledCount;

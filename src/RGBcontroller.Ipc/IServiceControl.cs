@@ -63,6 +63,9 @@ public interface IServiceControl
     /// <summary>The colors the strip shows right now, for the UI's live preview; the UI polls it while visible (since 1.5).</summary>
     Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken);
 
+    /// <summary>The colors every OpenRGB device shows right now, for the UI's tile previews (since 1.7).</summary>
+    Task<IReadOnlyList<DeviceColors>> GetDeviceColorsAsync(CancellationToken cancellationToken);
+
     /// <summary>Closes and reopens the strip's serial port (diagnostics when the LED box stops reacting) (since 1.6).</summary>
     Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken);
 }
@@ -153,6 +156,10 @@ public sealed record ConfigUpdateResult(bool Success, string? Message, long Revi
 
 /// <param name="Rgb">R, G, B bytes per LED in strip order (base64 in JSON); empty without a strip.</param>
 public sealed record StripColors(byte[] Rgb);
+
+/// <param name="Index">SDK device index (as in <see cref="DeviceInfo.Index"/>).</param>
+/// <param name="Rgb">R, G, B bytes per LED in the device's LED order, zones one after another.</param>
+public sealed record DeviceColors(int Index, byte[] Rgb);
 
 public sealed record DeviceList(IReadOnlyList<DeviceInfo> Devices, int StripLedCount);
 

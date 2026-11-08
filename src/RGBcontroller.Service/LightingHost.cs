@@ -317,6 +317,8 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         return null;
     }
 
+    public IReadOnlyList<DeviceColors> GetDeviceColors() => _lighting?.DeviceSnapshot() ?? [];
+
     public StripColors GetStripColors() => new(_lighting?.StripSnapshot() ?? []);
 
     public DeviceList GetDevices()
