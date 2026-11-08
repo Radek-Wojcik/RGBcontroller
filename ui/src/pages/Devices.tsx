@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useStore } from "../store";
 import { Empty, Panel } from "../ui";
+import { MappingWizard } from "./MappingWizard";
 
 const TYPES: Record<number, string> = { 0: "Motherboard", 1: "RAM", 2: "GPU", 3: "Cooler", 4: "LED strip", 5: "Keyboard", 6: "Mouse", 7: "Mousemat", 8: "Headset" };
 const ZONE_TYPES: Record<number, string> = { 0: "single", 1: "linear", 2: "matrix" };
@@ -7,6 +9,7 @@ const ZONE_TYPES: Record<number, string> = { 0: "single", 1: "linear", 2: "matri
 /** What OpenRGB detected and which group drives each zone. The mapping wizard (SPEC 7.4) builds on this page. */
 export function Devices() {
   const { devices, snapshot } = useStore();
+  const [wizard, setWizard] = useState(false);
   if (!devices || !snapshot) return <Empty>Waiting for the Service...</Empty>;
   if (devices.devices.length === 0) return <Empty>No OpenRGB devices are attached right now (OpenRGB starting or rescanning).</Empty>;
   const groups = snapshot.config.lighting.groups;
@@ -32,12 +35,19 @@ export function Devices() {
           </table>
         </Panel>
       ))}
-      <Panel title="Mapping wizard" meta="next">
-        <p className="dim">
-          The wizard lights each addressable header chain in turn so you can tell which component it is (pump ring,
-          fan, strip), its LED count, direction and start, and checks the RAM and keyboard orientation.
-        </p>
-      </Panel>
+      {wizard
+        ? <MappingWizard onClose={() => setWizard(false)} />
+        : (
+          <Panel title="Mapping wizard" meta="SPEC 7.4">
+            <p className="dim">
+              Lights each zone in turn, so you can tell which component it is (pump ring, fan, RAM stick), how many LEDs
+              it has, which way round it runs and where its top is. Radial and wave effects use this.
+            </p>
+            <div className="row buttons">
+              <button className="primary" onClick={() => setWizard(true)}>Start the wizard</button>
+            </div>
+          </Panel>
+        )}
     </div>
   );
 }

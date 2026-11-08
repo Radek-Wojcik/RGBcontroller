@@ -89,6 +89,7 @@ export function createMockHost(): Host {
     },
     setAllOff: p => ((allOff = p.off), emit({ event: "state", data: state() }), ok),
     showStripTest: () => ok,
+    identify: () => ok,
     getAgentSettings: () => ({}),
     getConfig: () => ({ revision, config }),
     updateConfig: p => {

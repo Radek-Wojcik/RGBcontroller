@@ -21,6 +21,16 @@ of truth for **what exists now**.
 - The owner's PC runs 0.4.0 from `install-dev.ps1`. The strip (LED BOX on COM7, 133 LEDs) and all 5 OpenRGB devices
   are lit. The UI window was opened and connected to the Service (IPC 1.7).
 
+**Update, 2026-11-08 (later): stage 5 continues on `stage-5-ui`**
+- The owner reported that after several days of testing everything works very well, so work went on with the stage 5
+  list in the owner's order. Done: IPC 1.8 `Identify` and the **mapping wizard** (commit `eb0970a` and the UI commit
+  after it; details in `docs/spikes/stage5-ui-plan.md`). 230 .NET + 20 front end tests are green.
+- **Not installed yet:** the owner's PC still runs 0.4.0 (IPC 1.7). The wizard needs the new Service
+  (`install-dev.ps1`, elevated, the owner clicks UAC) before it can be tried on the hardware.
+- The PR `stage-5-ui` into `main` and the tag `v0.4.0-stage4` are still waiting for the owner's explicit OK.
+- Still to do in stage 5: strip layout wizard, palette editor, profile create/duplicate/rename/delete/import/export,
+  diagnostics page (log tail, restart OpenRGB, rescan), tile drag and resize.
+
 **Open hardware problem (highest priority)**
 - The LED box sometimes stops taking frames. It still enumerates on USB and the Service writes to COM7, but the
   box does not answer. Only unplugging its power has helped. Logs since 2026-11-05 show that the box sends nothing
@@ -75,7 +85,7 @@ Elevated installs run with `install-dev.ps1` (the owner clicks UAC). Front end d
 | 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
 | 3. Power, session, display | **Passed** (2026-11-01; owner waived the remaining 7 sleep and 3 hibernate cycles) | `v0.3.0-stage3` | `docs/spikes/stage3-power.md` |
 | 4. Agent, tray, hotkeys, ambilight | **Passed** (2026-11-05; HDR skipped by the owner; ambilight CPU about 0.03%). Version 0.4.0; tag `v0.4.0-stage4` after the merge into `main` | | `docs/spikes/stage4-agent.md` |
-| 5. UI | **In progress**: WebView2 shell, React front end (six pages), live previews of the strip and every device, IPC 1.7. Missing: mapping and strip wizards, palette editor, profile create/duplicate/rename/delete/import/export, diagnostics page | | `docs/spikes/stage5-ui-plan.md` |
+| 5. UI | **In progress**: WebView2 shell, React front end (six pages), live previews of the strip and every device, IPC 1.7. Mapping wizard done (IPC 1.8, not installed yet). Missing: strip wizard, palette editor, profile create/duplicate/rename/delete/import/export, diagnostics page | | `docs/spikes/stage5-ui-plan.md` |
 | 6 | Not started | | |
 
 What works today on the owner's PC:

@@ -91,6 +91,34 @@ export interface HotkeysConfig { bindings: HotkeyBinding[]; brightnessStepPercen
 export interface TurnOffSet { strip: boolean; devices: string[] }
 export interface DisplayOffConfig { unlocked: TurnOffSet; locked: TurnOffSet }
 
+export type LedShape = "Auto" | "Line" | "Ring" | "Matrix" | "Point";
+
+/** A run of LEDs inside a zone that forms one physical component (pump ring, fan, RAM stick). */
+export interface SegmentLayoutConfig {
+  /** LED count; null means all remaining LEDs of the zone. */
+  leds: number | null;
+  shape: LedShape;
+  vertical: boolean;
+  reverse: boolean;
+  offset: number;
+}
+
+export interface ZoneLayoutConfig { device: string; zone: string; segments: SegmentLayoutConfig[] }
+export interface ZoneSizeConfig { device: string; zone: string; leds: number }
+
+export interface OpenRgbConfig {
+  executablePath: string;
+  host: string;
+  port: number;
+  minimumUptimeSeconds: number;
+  startupTimeoutSeconds: number;
+  deviceSettleMilliseconds: number;
+  resumeRescanDelayMilliseconds: number;
+  zoneSizes: ZoneSizeConfig[];
+}
+
+export interface IdentifyRequest { deviceIndex: number; zone: string | null; start: number; count: number; seconds: number }
+
 export interface ZoneRef { device: string; zone: string | null }
 export interface GroupConfig { name: string; members: ZoneRef[]; maxFps: number }
 export interface PaletteStop { position: number; color: string }
@@ -132,7 +160,7 @@ export interface LightingConfig {
   lockProfile: string | null;
   displayOff: DisplayOffConfig;
   defaultGroup: string | null;
-  layouts: unknown[];
+  layouts: ZoneLayoutConfig[];
   groups: GroupConfig[];
   palettes: PaletteConfig[];
   profiles: ProfileConfig[];
@@ -141,7 +169,7 @@ export interface LightingConfig {
 export interface AppConfig {
   schemaVersion: number;
   strip: StripConfig;
-  openRgb: Record<string, unknown>;
+  openRgb: OpenRgbConfig;
   lighting: LightingConfig;
   capture: ScreenCaptureConfig;
   hotkeys: HotkeysConfig;
@@ -188,4 +216,5 @@ export interface BridgeMethods {
   getStripColors: [undefined, { rgb: string }];
   getDeviceColors: [undefined, { index: number; rgb: string }[]];
   reopenStrip: [undefined, CommandResult];
+  identify: [IdentifyRequest, CommandResult];
 }

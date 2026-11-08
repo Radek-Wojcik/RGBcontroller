@@ -34,11 +34,25 @@ versions; `build.ps1` and `install-dev.ps1` build it through `tools\Build-Fronte
 | Page | Now | Missing |
 |---|---|---|
 | Dashboard | Ambilight tile (strip drawn in its layout, mode, brightness, solid color, fallback); one tile per group (effect, palette, speed, wave length, brightness, FPS cap with the RAM/GPU warning) | live LED preview, drag and resize of tiles |
-| Devices | OpenRGB devices, zones, LED counts, owning group | mapping wizard |
+| Devices | OpenRGB devices, zones, LED counts, owning group, mapping wizard (IPC 1.8) | rescan button (diagnostics) |
 | Ambilight | layout by numbers with the test pattern; response and picture settings | layout wizard (O14), screen thumbnail |
 | Profiles | activate, master brightness, logon and lock profile | palette editor, duplicate, rename, delete, import/export |
 | Hotkeys | record a combination, action, profile, duplicates flagged, brightness step | conflict report from the Agent |
 | Settings | display-off turn-off sets (O12), strip port, LED count, current limit, FPS cap, diagnostics, accent | log tail, restart OpenRGB, rescan |
+
+## IPC 1.8: Identify and the mapping wizard (done, not yet tried on the hardware)
+
+`IdentifyAsync(IdentifyRequest(deviceIndex, zone, start, count, seconds))` shows one LED range of one OpenRGB device:
+dim white (60%), the first LEDs green, the last LEDs red (a third of the range, 3 at most), every other OpenRGB device
+black; the strip keeps its profile. It is static, so the render loop idles. `seconds` 1-300 sets a timer in
+`LightingHost`; 0 ends it. Blackout and all-off override it, an invalid device, zone or range is refused and changes
+nothing. Core: `LightingEngine.SetIdentify`, `IdentifyTarget`, `IdentifyPattern`.
+
+Front end: Devices page, "Start the wizard" (`pages/MappingWizard.tsx`, logic and tests in `mapping.ts` /
+`mapping.test.ts`). Per zone (single LEDs and lines; matrix zones keep the device's own shape): component list with
+shape (Ring, Line, Point), LED count (the last component is "the rest"), direction, ring top LED, vertical lines; add,
+remove, undo, save into `lighting.layouts`; header LED count into `openRgb.zoneSizes` (applied at the next OpenRGB
+detection, the Service reports `RestartRequired`). Leaving the wizard ends the identification.
 
 ## Next steps
 
