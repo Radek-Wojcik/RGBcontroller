@@ -191,6 +191,9 @@ public sealed class IpcContractTests
 
         public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
 
+        public Task<CommandResult> IdentifyAsync(IdentifyRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new CommandResult(true, request.ToString()));
+
         public Task<IReadOnlyList<DeviceColors>> GetDeviceColorsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DeviceColors>>([new DeviceColors(3, [1, 2, 3])]);
 

@@ -66,6 +66,13 @@ public interface IServiceControl
     /// <summary>The colors every OpenRGB device shows right now, for the UI's tile previews (since 1.7).</summary>
     Task<IReadOnlyList<DeviceColors>> GetDeviceColorsAsync(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Mapping wizard (SPEC 7.4): shows one LED range of one OpenRGB device (dim white, first LEDs green, last LEDs red)
+    /// and turns the other OpenRGB devices black for <see cref="IdentifyRequest.Seconds"/>; 0 ends it early. Not saved
+    /// (since 1.8).
+    /// </summary>
+    Task<CommandResult> IdentifyAsync(IdentifyRequest request, CancellationToken cancellationToken);
+
     /// <summary>Closes and reopens the strip's serial port (diagnostics when the LED box stops reacting) (since 1.6).</summary>
     Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken);
 }
@@ -160,6 +167,13 @@ public sealed record StripColors(byte[] Rgb);
 /// <param name="Index">SDK device index (as in <see cref="DeviceInfo.Index"/>).</param>
 /// <param name="Rgb">R, G, B bytes per LED in the device's LED order, zones one after another.</param>
 public sealed record DeviceColors(int Index, byte[] Rgb);
+
+/// <param name="DeviceIndex">SDK device index (as in <see cref="DeviceInfo.Index"/>).</param>
+/// <param name="Zone">Zone name, or null to count <paramref name="Start"/> over the whole device.</param>
+/// <param name="Start">First LED of the range inside the zone, 0-based.</param>
+/// <param name="Count">LEDs in the range.</param>
+/// <param name="Seconds">How long the range stays lit (1-300); 0 returns to the profile.</param>
+public sealed record IdentifyRequest(int DeviceIndex, string? Zone, int Start, int Count, int Seconds);
 
 public sealed record DeviceList(IReadOnlyList<DeviceInfo> Devices, int StripLedCount);
 

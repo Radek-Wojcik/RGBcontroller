@@ -351,6 +351,83 @@ public sealed class LightingEngineTests
         Assert.All(output.Strip, c => Assert.Equal(default, c));
     }
 
+    [Fact]
+    public void Identify_ShowsOneZoneRangeAndBlanksTheOtherDevices()
+    {
+        var engine = Engine(Config("Solid White"), stripLeds: 4);
+        engine.SetDevices([Keyboard, LedLayoutBuilderTests.Board(20)]);
+        var output = new RecordingOutput();
+        engine.Render(TimeSpan.Zero, output);
+
+        // LED 0 is the onboard LED, the ARGB header follows: LEDs 1-20 of the device are LEDs 0-19 of the zone.
+        Assert.Null(engine.SetIdentify(new IdentifyTarget(1, "Aura Addressable 1", 5, 9)));
+        engine.Render(TimeSpan.FromSeconds(1), output);
+
+        var board = output.Leds[1];
+        Assert.Equal(RgbColor.Black, board[0]);
+        Assert.Equal(RgbColor.Black, board[5]);
+        Assert.All(board[6..9], c => Assert.Equal(new RgbColor(0, 153, 0), c));
+        Assert.All(board[9..12], c => Assert.Equal(new RgbColor(153, 153, 153), c));
+        Assert.All(board[12..15], c => Assert.Equal(new RgbColor(153, 0, 0), c));
+        Assert.Equal(RgbColor.Black, board[15]);
+        Assert.All(output.Leds[0], c => Assert.Equal(RgbColor.Black, c));
+        Assert.Contains(output.Strip, c => c != default); // the strip keeps its profile
+
+        Assert.Null(engine.SetIdentify(null));
+        engine.Render(TimeSpan.FromSeconds(2), output);
+        Assert.All(output.Leds[0], c => Assert.Equal(new RgbColor(255, 255, 255), c));
+    }
+
+    [Fact]
+    public void Identify_RejectsTargetsThatDoNotExistAndKeepsTheProfile()
+    {
+        var engine = Engine(Config("Solid White"));
+        engine.SetDevices([LedLayoutBuilderTests.Board(20)]);
+        var output = new RecordingOutput();
+        engine.Render(TimeSpan.Zero, output);
+        var before = output.Leds[0].ToArray();
+        Assert.Contains(before, c => c != RgbColor.Black);
+
+        Assert.NotNull(engine.SetIdentify(new IdentifyTarget(3, null, 0, 1)));
+        Assert.NotNull(engine.SetIdentify(new IdentifyTarget(0, "No such zone", 0, 1)));
+        Assert.NotNull(engine.SetIdentify(new IdentifyTarget(0, "Aura Addressable 1", 20, 1)));
+        Assert.NotNull(engine.SetIdentify(new IdentifyTarget(0, "Aura Addressable 1", 0, 0)));
+        engine.Render(TimeSpan.FromSeconds(1), output);
+
+        Assert.Equal(before, output.Leds[0]); // the profile still runs
+    }
+
+    [Fact]
+    public void Identify_CutsARangeAtTheEndOfTheZoneAndMarksSmallRanges()
+    {
+        var engine = Engine(Config("Solid White"));
+        engine.SetDevices([LedLayoutBuilderTests.Board(20)]);
+        var output = new RecordingOutput();
+
+        Assert.Null(engine.SetIdentify(new IdentifyTarget(0, "Aura Addressable 1", 18, 50)));
+        engine.Render(TimeSpan.Zero, output);
+        Assert.Equal([new RgbColor(0, 153, 0), new RgbColor(153, 0, 0)], output.Leds[0][19..]);
+
+        Assert.Null(engine.SetIdentify(new IdentifyTarget(0, null, 0, 1)));
+        engine.Render(TimeSpan.FromSeconds(1), output);
+        Assert.Equal(new RgbColor(153, 153, 153), output.Leds[0][0]);
+        Assert.Equal(RgbColor.Black, output.Leds[0][1]);
+    }
+
+    [Fact]
+    public void Identify_YieldsToBlackoutAndAllOff()
+    {
+        var engine = Engine(Config("Solid White"));
+        engine.SetDevices([Keyboard]);
+        var output = new RecordingOutput();
+        Assert.Null(engine.SetIdentify(new IdentifyTarget(0, null, 0, 10)));
+        engine.SetAllOff(true);
+
+        engine.Render(TimeSpan.Zero, output);
+
+        Assert.All(output.Leds[0], c => Assert.Equal(RgbColor.Black, c));
+    }
+
     private static LightingConfig ScreenConfig() => new()
     {
         ActiveProfile = "Screen",

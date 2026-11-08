@@ -95,6 +95,14 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
         _loop.Wake();
     }
 
+    /// <inheritdoc cref="LightingEngine.SetIdentify"/>
+    public string? SetIdentify(IdentifyTarget? target)
+    {
+        var error = _engine.SetIdentify(target);
+        _loop.Wake();
+        return error;
+    }
+
     /// <summary>The Agent started (true) or stopped (false) delivering screen colors.</summary>
     public void SetScreenFeed(bool live)
     {

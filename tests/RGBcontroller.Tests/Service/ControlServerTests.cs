@@ -123,6 +123,29 @@ public sealed class ControlServerTests
     }
 
     [Fact]
+    public async Task Endpoint_ValidatesIdentifyRequests()
+    {
+        var host = new FakeHost();
+        var endpoint = new ServiceControlEndpoint(host);
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(-1, "Aura Addressable 1", 0, 5, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, "Aura Addressable 1", -1, 5, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, "Aura Addressable 1", 0, 0, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, "Aura Addressable 1", 0, 100_000, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, new string('z', 500), 0, 5, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, null, 0, 5, 301), ct)).Success);
+        Assert.Null(host.LastIdentify);
+
+        Assert.True((await endpoint.IdentifyAsync(new IdentifyRequest(2, "Aura Addressable 1", 0, 5, 30), ct)).Success);
+        Assert.Equal((new IdentifyRequest(2, "Aura Addressable 1", 0, 5, 30), TimeSpan.FromSeconds(30)), host.LastIdentify);
+
+        // Zero seconds ends an identification whatever else the request holds.
+        Assert.True((await endpoint.IdentifyAsync(new IdentifyRequest(0, null, 0, 1, 0), ct)).Success);
+        Assert.Equal(TimeSpan.Zero, host.LastIdentify!.Value.Duration);
+    }
+
+    [Fact]
     public async Task Endpoint_RejectsIncompleteConfigs()
     {
         var host = new FakeHost();
@@ -204,6 +227,14 @@ public sealed class ControlServerTests
         public StripColors GetStripColors() => new([]);
 
         public string? ReopenStrip() => null;
+
+        public (IdentifyRequest Request, TimeSpan Duration)? LastIdentify { get; private set; }
+
+        public string? Identify(IdentifyRequest request, TimeSpan duration)
+        {
+            LastIdentify = (request, duration);
+            return null;
+        }
 
         public IReadOnlyList<DeviceColors> GetDeviceColors() => [];
 

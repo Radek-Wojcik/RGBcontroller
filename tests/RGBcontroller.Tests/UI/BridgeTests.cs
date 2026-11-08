@@ -22,6 +22,20 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task ForwardsIdentifyRequestsToTheService()
+    {
+        var service = new FakeService();
+        var bridge = new Bridge(() => service);
+
+        var reply = JsonNode.Parse(await bridge.HandleAsync(
+            """{"id": 9, "method": "identify", "params": {"deviceIndex": 2, "zone": "Aura Addressable 1", "start": 0, "count": 20, "seconds": 60}}""",
+            TestContext.Current.CancellationToken))!;
+
+        Assert.True(reply["result"]!["success"]!.GetValue<bool>());
+        Assert.Equal(new IdentifyRequest(2, "Aura Addressable 1", 0, 20, 60), service.LastIdentify);
+    }
+
+    [Fact]
     public async Task SendsTheConfigInTheWireFormat()
     {
         var bridge = new Bridge(() => new FakeService());
@@ -106,6 +120,14 @@ public sealed class BridgeTests
         public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(new StripColors([255, 0, 128]));
 
         public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public IdentifyRequest? LastIdentify { get; private set; }
+
+        public Task<CommandResult> IdentifyAsync(IdentifyRequest request, CancellationToken cancellationToken)
+        {
+            LastIdentify = request;
+            return Ok();
+        }
 
         public Task<IReadOnlyList<DeviceColors>> GetDeviceColorsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DeviceColors>>([]);

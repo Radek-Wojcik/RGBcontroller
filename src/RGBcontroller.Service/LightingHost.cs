@@ -45,6 +45,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     private FrameServer? _frames;
     private Timer? _deferredSave;
     private Timer? _stripTestEnd;
+    private Timer? _identifyEnd;
     private bool _savePending;
     private bool _allOff;
     private bool _screenLive;
@@ -118,6 +119,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
 
         _deferredSave = new Timer(_ => SaveDeferred());
         _stripTestEnd = new Timer(_ => ShowStripTest(TimeSpan.Zero));
+        _identifyEnd = new Timer(_ => Identify(new IdentifyRequest(0, null, 0, 1, 0), TimeSpan.Zero));
         _control = new ControlServer(IpcProtocol.ControlPipeName, subscription => new ServiceControlEndpoint(this, subscription), _log);
         StateChanged += _control.Broadcast;
         _control.Start();
@@ -185,6 +187,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
 
         _deferredSave?.Dispose();
         _stripTestEnd?.Dispose();
+        _identifyEnd?.Dispose();
         SaveDeferred();
 
         _log.Information("Lighting host stopped");
@@ -314,6 +317,33 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
 
         _log.Information("Strip reconnect requested by a client");
         _strip.Reopen("requested by the user");
+        return null;
+    }
+
+    public string? Identify(IdentifyRequest request, TimeSpan duration)
+    {
+        if (_lighting is null)
+        {
+            return "The lighting engine is not running.";
+        }
+
+        if (duration <= TimeSpan.Zero)
+        {
+            _identifyEnd?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _lighting.SetIdentify(null);
+            _log.Information("Identify ended");
+            return null;
+        }
+
+        var error = _lighting.SetIdentify(new IdentifyTarget(request.DeviceIndex, request.Zone, request.Start, request.Count));
+        if (error is not null)
+        {
+            return error;
+        }
+
+        _identifyEnd?.Change(duration, Timeout.InfiniteTimeSpan);
+        _log.Information("Identify device {Device} zone {Zone} LEDs {Start}+{Count} for {Seconds} s",
+            request.DeviceIndex, request.Zone ?? "(all)", request.Start, request.Count, duration.TotalSeconds);
         return null;
     }
 

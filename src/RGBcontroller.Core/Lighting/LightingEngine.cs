@@ -58,6 +58,7 @@ public sealed class LightingEngine
     private LightingSituation _situation = LightingSituation.Default;
     private bool _allOff;
     private bool _stripTest;
+    private IdentifyTarget? _identify;
     private bool _screenLive;
     private Target? _screenTarget;
 
@@ -119,6 +120,79 @@ public sealed class LightingEngine
                 _rebuild = true;
             }
         }
+    }
+
+    /// <summary>
+    /// Lights one LED range of one device for the mapping wizard (SPEC 7.4) and turns every other OpenRGB device black;
+    /// the strip keeps its profile. The range is dim white with its first LEDs green and its last LEDs red, so the
+    /// start and the direction of a chain can be read off the hardware. <c>null</c> returns to the profile.
+    /// </summary>
+    /// <returns>Null on success, otherwise why the target is not valid (nothing changes then).</returns>
+    public string? SetIdentify(IdentifyTarget? target)
+    {
+        lock (_gate)
+        {
+            if (target is not null)
+            {
+                var error = ResolveIdentify(target, out _, out _);
+                if (error is not null)
+                {
+                    return error;
+                }
+            }
+
+            if (_identify != target)
+            {
+                _identify = target;
+                _rebuild = true;
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>Finds the LED range of <paramref name="target"/> in the device's own LED order (zones one after another).</summary>
+    private string? ResolveIdentify(IdentifyTarget target, out int first, out int count)
+    {
+        first = 0;
+        count = 0;
+        if (target.DeviceIndex < 0 || target.DeviceIndex >= _devices.Count)
+        {
+            return $"There is no device number {target.DeviceIndex} right now.";
+        }
+
+        var device = _devices[target.DeviceIndex];
+        var zoneStart = 0;
+        var zoneCount = device.Leds.Count;
+        if (target.Zone is not null)
+        {
+            var zone = device.Zones.FirstOrDefault(z => string.Equals(z.Name, target.Zone, StringComparison.OrdinalIgnoreCase));
+            if (zone is null)
+            {
+                return $"{device.Name} has no zone '{target.Zone}'.";
+            }
+
+            foreach (var other in device.Zones)
+            {
+                if (ReferenceEquals(other, zone))
+                {
+                    break;
+                }
+
+                zoneStart += (int)other.LedsCount;
+            }
+
+            zoneCount = (int)zone.LedsCount;
+        }
+
+        if (target.Start < 0 || target.Count < 1 || target.Start >= zoneCount)
+        {
+            return $"The LED range {target.Start}+{target.Count} is outside the {zoneCount} LEDs of {target.Zone ?? device.Name}.";
+        }
+
+        first = Math.Min(zoneStart + target.Start, device.Leds.Count);
+        count = Math.Min(target.Count, Math.Min(zoneCount - target.Start, device.Leds.Count - first));
+        return null;
     }
 
     /// <summary>
@@ -400,7 +474,9 @@ public sealed class LightingEngine
         for (var index = 0; index < _devices.Count; index++)
         {
             var device = _devices[index];
-            targets.Add(BuildDevice(index, device, profile, config, effects, off.Contains(device.Name), now));
+            targets.Add(_identify is not null && !dark
+                ? BuildIdentifyDevice(index, device, config, _identify, now)
+                : BuildDevice(index, device, profile, config, effects, off.Contains(device.Name), now));
         }
 
         _log.Information("Rendering profile {Profile} ({Situation:l}): {Targets}", profile.Name,
@@ -454,6 +530,27 @@ public sealed class LightingEngine
 
         Binding[] bindings = [new Binding(0, _stripLedCount, new ScreenFeedEffect(pattern), Brightness(50, 100))];
         return new Target(Target.Strip, "strip test pattern", _stripPoints, bindings, _stripMaxFps, now);
+    }
+
+    /// <summary>The identified device shows its marked range, every other device is black. Static, so the render loop idles.</summary>
+    private Target BuildIdentifyDevice(int index, ControllerData device, LightingConfig config, IdentifyTarget identify, TimeSpan now)
+    {
+        var points = LedLayoutBuilder.Build(device, config.Layouts);
+        var pattern = new RgbColor[points.Length];
+        var label = $"{device.Name} dark (identify)";
+        if (index == identify.DeviceIndex && ResolveIdentify(identify, out var first, out var count) is null)
+        {
+            IdentifyPattern.Fill(pattern.AsSpan(first, count));
+            label = $"{device.Name} identify {identify.Zone ?? "all"} {identify.Start}+{count}";
+        }
+
+        Binding[] bindings = [new Binding(0, points.Length, new ScreenFeedEffect(pattern), Brightness(60, 100))];
+        var modeIndex = DeviceModes.FindPerLedMode(device);
+        return new Target(index, label, points, bindings, DefaultFps, now)
+        {
+            ModeIndex = modeIndex,
+            Mode = modeIndex >= 0 ? device.Modes[modeIndex] : null,
+        };
     }
 
     private Target BuildDevice(
