@@ -1,10 +1,68 @@
 # RGBcontroller: project state and handoff
 
-Last updated: 2026-11-04, stage 4 gate partly run and its fixes installed; stage 5 started on branch `stage-5-ui`. **Read this file right after
+Last updated: 2026-11-08. Stage 4 passed (version 0.4.0 installed); stage 5 in progress on branch `stage-5-ui`. **Read this file right after
 `SPEC.md` and `CLAUDE.md` when you start a new session.** It records everything that was built, decided and learned
 in stages 0-4, the exact state of
 the owner's PC, and what to do next. `SPEC.md` stays the source of truth for requirements. This file is the source
 of truth for **what exists now**.
+
+---
+
+## 0. Handoff, 2026-11-08 (read this first)
+
+**Where the project stands**
+- Stages 0 to 4 passed. Stage 4 gate: 1, 2, 3 (smoothness), 4 (CPU), 5, 7, 8, 9 passed; 6 (HDR) skipped by the owner.
+  Ambilight CPU measured on 2026-11-05 with `tools\Measure-RGBcontroller.ps1` for 60 s on a colorful fullscreen
+  film: Agent 0.022%, Service 0.012%, UI (open) 0.026%, OpenRGB 1.7% (RAM at 10 FPS, as before).
+- Stage 5 is in progress (see the table in section 1 and `docs/spikes/stage5-ui-plan.md`).
+- The repository is **public** (MIT). `main` has PR #3 to #6 merged. Five commits are on `stage-5-ui` only:
+  `c63747f` (letterbox thin-line fix), `ccfa0f2` (version 0.4.0 and the stage 4 gate report), `f75deff` (IPC 1.7),
+  `c312f5f` (device previews), `561169e` (docs). They are pushed; a PR into `main` still needs the owner's OK.
+- The owner's PC runs 0.4.0 from `install-dev.ps1`. The strip (LED BOX on COM7, 133 LEDs) and all 5 OpenRGB devices
+  are lit. The UI window was opened and connected to the Service (IPC 1.7).
+
+**Open hardware problem (highest priority)**
+- The LED box sometimes stops taking frames. It still enumerates on USB and the Service writes to COM7, but the
+  box does not answer. Only unplugging its power has helped. Logs since 2026-11-05 show that the box sends nothing
+  back (`Strip link last minute: N frames sent, 0 bytes received`).
+- Hypotheses that were checked and rejected or not supported: a voltage drop (the owner's supply is 5 V 8 A), a
+  frame rate that is too high (down to 21 FPS, still happened), and the board's keep-alive.
+- Tools in place to narrow it down: the tray item **Reconnect strip**, `RGBcontroller.Service.exe --strip-reopen`,
+  and a once-a-minute log line with frames sent and bytes or handshakes received.
+- Next steps: when it freezes, note the time, try Reconnect strip, then unplug the USB cable, then the power. Report
+  which step helped. A step-2 fix becomes automatic in the program; a step-3 result points at the USB path or the
+  monitor's hub; a step-4 result points at the board itself.
+
+**Known limitations (not bugs)**
+- Netflix and other DRM video show black on the strip: Windows and the GPU do not let any program capture protected
+  frames. Workaround for the owner: a browser with hardware acceleration turned off.
+- Ambilight bars: a dark image edge can still look dim next to a bright side. The bars are detected per frame with
+  hysteresis (1.5 s), so a quick change of content is followed with a short delay.
+- The default device groups are the author's hardware. Another PC needs its `config.json` edited until the mapping
+  wizard exists.
+- The OpenRGB executable is pinned from the owner's `C:\Program Files\OpenRGB` (a stage 6 item).
+
+**Next steps, in order**
+1. Owner: test sleep and shutdown again with the 0.4.0 build (the strip must go dark). Report any freeze with the time.
+2. With the owner's OK: open a PR `stage-5-ui` into `main`, merge it, and tag `v0.4.0-stage4` on the merge commit.
+3. Stage 5, in the order the owner asked for: the mapping wizard (identify each ARGB channel), the strip layout
+   wizard in the UI, the palette editor, profile create/duplicate/rename/delete/import/export, the diagnostics page
+   (log tail, restart OpenRGB, rescan), tile drag and resize.
+4. Stage 5 gate: the owner completes both wizards on the real hardware, edits a palette, switches profiles, and opens
+   and closes the UI repeatedly without processes or CPU left behind.
+5. Stage 6: installer with the pinned OpenRGB, PawnIO check, autostart conflict detection with consent, uninstall,
+   crash tests, `ARCHITECTURE.md`.
+
+**How to resume (commands)**
+```powershell
+.\build.ps1 -Test                       # 224 .NET + 10 front end tests
+.\tools\Measure-RGBcontroller.ps1 -Label check -DurationSeconds 60
+& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status
+& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --strip-reopen
+Get-Content (Get-ChildItem C:\ProgramData\RGBcontroller\logs\service-*.log | Sort-Object LastWriteTime)[-1].FullName -Tail 40
+```
+Elevated installs run with `install-dev.ps1` (the owner clicks UAC). Front end development: `npm run dev` in `ui/`
+(stand-in data, `?page=ambilight` opens a page directly).
 
 ---
 
@@ -16,13 +74,14 @@ of truth for **what exists now**.
 | 1. Service + OpenRGB supervisor + Adalight | **Passed** (2026-10-31) | `v0.1.0-stage1` | `docs/spikes/R1-R5-R6-stage1.md` |
 | 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
 | 3. Power, session, display | **Passed** (2026-11-01; owner waived the remaining 7 sleep and 3 hibernate cycles) | `v0.3.0-stage3` | `docs/spikes/stage3-power.md` |
-| 4. Agent, tray, hotkeys, ambilight | **Gate partly run** (2026-11-04): tests 1, 2, 5 passed, 6 (HDR) skipped by the owner, 3, 4, 7, 8, 9 to repeat on the fixed build | | `docs/spikes/stage4-agent.md` |
-| 5. UI | **In progress** on `stage-5-ui`: IPC 1.4, WebView2 shell, React front end with six pages; next: live preview, identify API, wizards | | `docs/spikes/stage5-ui-plan.md` |
+| 4. Agent, tray, hotkeys, ambilight | **Passed** (2026-11-05; HDR skipped by the owner; ambilight CPU about 0.03%). Version 0.4.0; tag `v0.4.0-stage4` after the merge into `main` | | `docs/spikes/stage4-agent.md` |
+| 5. UI | **In progress**: WebView2 shell, React front end (six pages), live previews of the strip and every device, IPC 1.7. Missing: mapping and strip wizards, palette editor, profile create/duplicate/rename/delete/import/export, diagnostics page | | `docs/spikes/stage5-ui-plan.md` |
 | 6 | Not started | | |
 
 What works today on the owner's PC:
-- The installed build is branch `stage-5-ui` at commit b12dbb4 (`--status` reports 0.3.0, IPC 1.4): stage 4 fixes,
-  the UI with the React front end, and the USB hot-plug rescan. Versions are bumped when the gates pass.
+- The installed build is version **0.4.0** (`--status` reports 0.4.0, IPC 1.7) from branch `stage-5-ui` at commit
+  561169e. It contains the stage 4 fixes, the UI, the USB hot-plug rescan, the ambilight thin-line fix and the device
+  previews. Section 0 lists the details.
 - **Stage 4:** the Agent runs in the tray (started at logon from HKCU Run), mirrors the screen to the strip (Screen
   mode) while the session is unlocked and the display is on, and has hotkeys Ctrl+F9 (solid toggle), Ctrl+F10 (cycle
   strip mode), Ctrl+F11/F12 (strip brightness -/+). The strip is now **133 LEDs on COM7** in the owner's layout
@@ -455,29 +514,7 @@ Skeletons only: the Agent logs and exits; the UI is an empty WPF window. They ar
 
 ## 7. Next steps
 
-**Current (2026-11-04):**
-1. Ask the owner to repeat stage 4 tests 3, 4 (they say "mierz", then measure), 7, 8 and 9 on the installed build.
-2. With the owner's OK: install `stage-5-ui` (`install-dev.ps1`, UAC) so "Open RGBcontroller" in the tray shows the new UI.
-3. Continue stage 5 with `docs/spikes/stage5-ui-plan.md` (front end, preview stream, identify API, wizards).
-
-The stage 4 gate list (still valid):
-
-1. **Run the stage 4 gate** with the owner (give the steps in Polish, read logs and measure yourself):
-   1. black screen = strip off (YouTube "black screen" fullscreen);
-   2. dark scenes dark, no tail on fades;
-   3. smooth at 20/30, letterbox film: bands move into the picture after about 1.5 s, subtitles do not disturb;
-   4. CPU with a colorful fullscreen video, 60-70 s, `tools\Measure-RGBcontroller.ps1`: Agent + Service (+ OpenRGB
-      minus its RAM baseline) below 1%;
-   5. borderless game mirrors; exclusive fullscreen mirrors or falls back within about 2 s and returns;
-   6. HDR on (Win+Alt+B): colors not washed out or blown;
-   7. hotkeys Ctrl+F9/F10/F11/F12 and the tray menu (profiles, strip mode, slider, all off);
-   8. sleep and wake: Screen mode back, hotkeys still work;
-   9. Win+L: strip falls back to the rainbow, back to Screen after unlock.
-2. Fix what the gate finds on `stage-4-agent`, re-install with `install-dev.ps1` (elevated, the owner clicks UAC).
-3. After the gate: bump `Directory.Build.props` to 0.4.0, update this file, merge `stage-4-agent` into `main`
-   with `--no-ff`, tag `v0.4.0-stage4`, push, refresh the README through the skill.
-4. Still open from before: should the G502 mouse be off (O5)?
-5. Then stage 5 (UI, including the strip wizard of O14).
+See section 0 (2026-11-08) for the current list. Stage 4 is closed; the remaining work is stage 5 and stage 6.
 
 ## 8. How to resume in a new session
 

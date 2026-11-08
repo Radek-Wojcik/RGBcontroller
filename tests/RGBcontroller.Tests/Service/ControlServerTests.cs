@@ -205,6 +205,8 @@ public sealed class ControlServerTests
 
         public string? ReopenStrip() => null;
 
+        public IReadOnlyList<DeviceColors> GetDeviceColors() => [];
+
         public void ShowStripTest(TimeSpan duration)
         {
         }

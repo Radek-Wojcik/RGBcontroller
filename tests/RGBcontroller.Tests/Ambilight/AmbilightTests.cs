@@ -273,6 +273,22 @@ public sealed class LetterboxDetectorTests
     }
 
     [Fact]
+    public void ThinLinesAcrossTheBarsDoNotEndThem()
+    {
+        // A 21:9 trailer in a fullscreen player: a full-width red progress bar inside the bottom bar, a title line in the top bar.
+        var detector = new LetterboxDetector(TimeSpan.Zero);
+        var image = new TestImage(200, 100).Fill((x, y) =>
+            y is 3 && x < 150 ? new RgbColor(255, 255, 255)
+            : y is 94 ? new RgbColor(220, 20, 20)
+            : y is < 12 or >= 88 ? default
+            : new RgbColor(30, 90, 120));
+
+        detector.Update(image.View(), 1, TimeSpan.Zero);
+
+        Assert.Equal(new ContentRect(0, 12, 200, 88), detector.Update(image.View(), 1, TimeSpan.Zero));
+    }
+
+    [Fact]
     public void PillarboxBarsAreFound()
     {
         var detector = new LetterboxDetector(TimeSpan.Zero);

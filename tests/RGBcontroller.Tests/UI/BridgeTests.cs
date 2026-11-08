@@ -106,5 +106,8 @@ public sealed class BridgeTests
         public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(new StripColors([255, 0, 128]));
 
         public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public Task<IReadOnlyList<DeviceColors>> GetDeviceColorsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DeviceColors>>([]);
     }
 }

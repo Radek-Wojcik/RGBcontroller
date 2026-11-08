@@ -4,6 +4,7 @@ using RGBcontroller.Core.Config;
 using RGBcontroller.Core.Lighting;
 using RGBcontroller.Core.OpenRgb;
 using RGBcontroller.Core.Strip;
+using RGBcontroller.Ipc;
 using Serilog;
 
 namespace RGBcontroller.Service.Lighting;
@@ -70,6 +71,9 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
 
     /// <summary>What the strip shows right now (live preview in the UI).</summary>
     public byte[] StripSnapshot() => _output.StripSnapshot();
+
+    /// <summary>What every OpenRGB device shows right now (live tile previews in the UI).</summary>
+    public IReadOnlyList<DeviceColors> DeviceSnapshot() => _output.DeviceSnapshot();
 
     public void SetStripLayout(StripLayout layout)
     {
@@ -194,8 +198,25 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
             }
         }
 
+        private readonly Dictionary<int, byte[]> _lastDevices = [];
+
         public void SetDeviceLeds(int deviceIndex, ReadOnlySpan<RgbColor> colors)
         {
+            lock (_stripGate)
+            {
+                if (!_lastDevices.TryGetValue(deviceIndex, out var last) || last.Length != colors.Length * 3)
+                {
+                    _lastDevices[deviceIndex] = last = new byte[colors.Length * 3];
+                }
+
+                for (var i = 0; i < colors.Length; i++)
+                {
+                    last[i * 3] = colors[i].R;
+                    last[i * 3 + 1] = colors[i].G;
+                    last[i * 3 + 2] = colors[i].B;
+                }
+            }
+
             var client = _client;
             if (client is null || _failed)
             {
@@ -226,6 +247,15 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
                 }
 
                 colors.CopyTo(_lastStrip);
+            }
+        }
+
+        /// <summary>The colors last sent to each OpenRGB device (SDK index), as R,G,B bytes per LED.</summary>
+        public IReadOnlyList<DeviceColors> DeviceSnapshot()
+        {
+            lock (_stripGate)
+            {
+                return [.. _lastDevices.OrderBy(d => d.Key).Select(d => new DeviceColors(d.Key, [.. d.Value]))];
             }
         }
 

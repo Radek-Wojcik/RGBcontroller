@@ -33,3 +33,24 @@ frame with every LED's sampled band outlined).
 - HDR desktop (FP16 scRGB through `DuplicateOutput1`, tone-mapped with the Windows SDR white level).
 - UAC prompt, lock screen, a borderless game and an exclusive-fullscreen game (`DXGI_ERROR_ACCESS_LOST`; the strip
   keeps its last colors for 1.5 s, then the Service shows the fallback until capture is back).
+
+## Gate result (2026-11-05): passed
+
+| # | Test | Result |
+|---|---|---|
+| 1 | Black screen = strip off | Passed |
+| 2 | Dark scenes dark, no tail | Passed |
+| 3 | Smoothness, letterbox | Smooth transitions passed. Letterbox needed three fixes: bars with subtitles, logos or player controls (75% black rule), and thin full-width lines across a bar such as a progress bar (the picture starts after 3% of non-bar rows). |
+| 4 | CPU, colorful fullscreen video, 60 s, `tools\Measure-RGBcontroller.ps1` | Agent 0.022%, Service 0.012%, UI (open) 0.026%; OpenRGB 1.716% is the RAM at 10 FPS as before. The ambilight costs about 0.03% of the whole CPU (target below 1%). |
+| 5 | Game | Passed (borderless) |
+| 6 | HDR | Skipped by the owner (does not use HDR now) |
+| 7 | Hotkeys and tray | Passed (after the on-screen note was added) |
+| 8 | Sleep and wake | Passed; the strip goes black before sleep and shutdown since the black frames are drained |
+| 9 | Win+L | Passed: the strip shows the lock fallback |
+
+Fixes during the gate: faster response (capture 30 FPS, attack 40 ms, release 120 ms) with an 800 ms fade-in, gamma
+1.5, brightness 100% by default, a busy GPU no longer re-creates the duplication, the strip port reopens after resume,
+USB arrivals rescan OpenRGB, frames use at most 75% of the serial link.
+
+Open (hardware): the LED box occasionally stops taking frames and only a power cycle helped so far. The Service logs
+the board's answers once a minute and offers "Reconnect strip" in the tray to narrow it down.
