@@ -245,6 +245,9 @@ p.dim { font-size: 12.5px; }
 table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .grid th { text-align: left; font: 500 11px var(--head); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); padding: 4px 8px 6px 0; border-bottom: 1px solid var(--line-2); }
 .grid td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+/* Number fields inside a table row keep their label for screen readers only. */
+.grid td.num .field.number > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.grid .field.number { min-width: 70px; max-width: 110px; }
 .grid tr.conflict td { background: rgba(255, 77, 106, 0.06); }
 .grid select { height: 30px; }
 .grid.matrix td:not(:first-child), .grid.matrix th:not(:first-child) { text-align: center; }
