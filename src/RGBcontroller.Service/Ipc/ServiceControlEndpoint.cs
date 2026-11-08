@@ -42,6 +42,10 @@ internal interface IControllableHost
 
     /// <returns>Null on success, otherwise a message for the client.</returns>
     string? ReopenStrip();
+
+    /// <param name="duration">Zero ends the identification.</param>
+    /// <returns>Null on success, otherwise a message for the client.</returns>
+    string? Identify(IdentifyRequest request, TimeSpan duration);
 }
 
 /// <summary>The control connection a request arrived on; subscribing makes the server push state changes to it.</summary>
@@ -54,6 +58,9 @@ internal interface IStateSubscription
 internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubscription? subscription = null) : IServiceControl
 {
     public const int MaxNameLength = 100;
+
+    /// <summary>Largest LED range one identification may ask for (the biggest zone is a few hundred LEDs).</summary>
+    public const int MaxIdentifyLeds = 1000;
 
     private static readonly string AppVersion = typeof(ServiceControlEndpoint).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
@@ -173,6 +180,25 @@ internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubsc
     public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetStripColors());
 
     public Task<IReadOnlyList<DeviceColors>> GetDeviceColorsAsync(CancellationToken cancellationToken) => Task.FromResult(host.GetDeviceColors());
+
+    public Task<CommandResult> IdentifyAsync(IdentifyRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Seconds is < 0 or > 300)
+        {
+            return Task.FromResult(new CommandResult(false, "An identification lasts 0-300 seconds."));
+        }
+
+        if (request.Seconds > 0
+            && (request.DeviceIndex < 0 || request.Start < 0 || request.Count is < 1 or > MaxIdentifyLeds
+                || (request.Zone is not null && !IsName(request.Zone))))
+        {
+            return Task.FromResult(new CommandResult(false, $"Identify needs a device, a zone name of 1-{MaxNameLength} characters, a start of 0 or more and 1-{MaxIdentifyLeds} LEDs."));
+        }
+
+        var error = host.Identify(request, TimeSpan.FromSeconds(request.Seconds));
+        return Task.FromResult(new CommandResult(error is null, error));
+    }
 
     public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken)
     {

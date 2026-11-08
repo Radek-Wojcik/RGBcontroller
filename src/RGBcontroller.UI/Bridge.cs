@@ -57,6 +57,7 @@ internal sealed class Bridge(Func<IServiceControl?> service)
         "updateConfig" => await s.UpdateConfigAsync(Params<ConfigUpdateRequest>(p), ct).ConfigureAwait(false),
         "getDevices" => await s.GetDevicesAsync(ct).ConfigureAwait(false),
         "getStripColors" => await s.GetStripColorsAsync(ct).ConfigureAwait(false),
+        "identify" => await s.IdentifyAsync(Params<IdentifyRequest>(p), ct).ConfigureAwait(false),
         "reopenStrip" => await s.ReopenStripAsync(ct).ConfigureAwait(false),
         "getDeviceColors" => await s.GetDeviceColorsAsync(ct).ConfigureAwait(false),
         _ => throw new BridgeException($"Unknown method '{method}'."),
