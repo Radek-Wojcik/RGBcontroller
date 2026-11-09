@@ -35,8 +35,12 @@ param(
         [Environment]::GetFolderPath('CommonStartup'),
         [Environment]::GetFolderPath('Startup')),
     [switch]$SkipTasks,
-    [switch]$SkipDriverChecks
+    [switch]$SkipDriverChecks,
+    # Test hook, comma separated: 'PawnIoMissing' and/or 'WebView2Missing' report that component as absent.
+    [string]$Simulate = ''
 )
+
+$simulated = @($Simulate -split ',' | Where-Object { $_ })
 
 $ErrorActionPreference = 'Stop'
 
@@ -93,6 +97,7 @@ function Get-Findings {
 }
 
 function Get-PawnIoState {
+    if ($simulated -contains 'PawnIoMissing') { return 'Missing' }
     if ($SkipDriverChecks) { return 'Running' }
     $driver = Get-CimInstance Win32_SystemDriver -Filter "Name='PawnIO'" -ErrorAction SilentlyContinue
     if (-not $driver) { return 'Missing' }
@@ -100,6 +105,7 @@ function Get-PawnIoState {
 }
 
 function Get-WebView2Version {
+    if ($simulated -contains 'WebView2Missing') { return $null }
     if ($SkipDriverChecks) { return '0.0' }
     foreach ($path in 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
         'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
