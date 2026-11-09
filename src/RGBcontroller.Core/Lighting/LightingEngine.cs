@@ -58,6 +58,7 @@ public sealed class LightingEngine
     private LightingSituation _situation = LightingSituation.Default;
     private bool _allOff;
     private bool _stripTest;
+    private (int Start, int Count)? _stripMarker;
     private IdentifyTarget? _identify;
     private bool _screenLive;
     private Target? _screenTarget;
@@ -114,11 +115,27 @@ public sealed class LightingEngine
     {
         lock (_gate)
         {
-            if (_stripTest != on)
+            if (_stripTest != on || (!on && _stripMarker is not null))
             {
                 _stripTest = on;
+                _stripMarker = null;
                 _rebuild = true;
             }
+        }
+    }
+
+    /// <summary>
+    /// Shows only the strip LEDs <paramref name="start"/> .. <paramref name="start"/> + <paramref name="count"/> - 1 in white
+    /// instead of the profile, for the strip layout wizard (SPEC 7.5); the range is clipped to the strip. Ends with
+    /// <see cref="SetStripTest"/> (false).
+    /// </summary>
+    public void SetStripMarker(int start, int count)
+    {
+        lock (_gate)
+        {
+            _stripTest = true;
+            _stripMarker = (start, count);
+            _rebuild = true;
         }
     }
 
@@ -522,6 +539,12 @@ public sealed class LightingEngine
         var pattern = new RgbColor[_stripLedCount];
         for (var i = 0; i < pattern.Length; i++)
         {
+            if (_stripMarker is { } marker)
+            {
+                pattern[i] = i >= marker.Start && i - marker.Start < marker.Count ? new RgbColor(255, 255, 255) : default;
+                continue;
+            }
+
             pattern[i] = i < 3 ? new RgbColor(0, 255, 0)
                 : i >= pattern.Length - 3 ? new RgbColor(255, 0, 0)
                 : i % 10 == 0 ? new RgbColor(255, 255, 255)

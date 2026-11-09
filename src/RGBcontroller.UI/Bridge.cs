@@ -52,6 +52,7 @@ internal sealed class Bridge(Func<IServiceControl?> service)
         "changeStrip" => await s.ChangeStripAsync(Params<StripChangeRequest>(p), ct).ConfigureAwait(false),
         "setAllOff" => await s.SetAllOffAsync(Arg<bool>(p, "off"), ct).ConfigureAwait(false),
         "showStripTest" => await s.ShowStripTestAsync(Arg<int>(p, "seconds"), ct).ConfigureAwait(false),
+        "showStripMarker" => await s.ShowStripMarkerAsync(Params<StripMarkerRequest>(p), ct).ConfigureAwait(false),
         "getAgentSettings" => await s.GetAgentSettingsAsync(ct).ConfigureAwait(false),
         "getConfig" => await s.GetConfigAsync(ct).ConfigureAwait(false),
         "updateConfig" => await s.UpdateConfigAsync(Params<ConfigUpdateRequest>(p), ct).ConfigureAwait(false),

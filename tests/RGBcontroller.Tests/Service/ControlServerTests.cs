@@ -243,6 +243,10 @@ public sealed class ControlServerTests
         {
         }
 
+        public void ShowStripMarker(int start, int count, TimeSpan duration)
+        {
+        }
+
         private readonly string[] _profiles = ["Rainbow", "Night"];
 
         public string Active { get; private set; } = "Rainbow";
