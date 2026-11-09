@@ -320,3 +320,6 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 .wizard-step { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 16px; }
 .wizard-step h3, .panel h3 { margin: 12px 0 0; font: 600 13px/1.2 var(--head); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); }
+
+.palette-bar { height: 22px; border: 1px solid var(--line); margin-bottom: 10px; }
+button.danger { border-color: var(--bad, #e5484d); color: var(--bad, #e5484d); }
