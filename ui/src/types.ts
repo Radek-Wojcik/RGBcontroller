@@ -217,5 +217,8 @@ export interface BridgeMethods {
   getStripColors: [undefined, { rgb: string }];
   getDeviceColors: [undefined, { index: number; rgb: string }[]];
   reopenStrip: [undefined, CommandResult];
+  getLogTail: [{ component: "service"; lines: number }, { file: string; lines: string[] }];
+  restartOpenRgb: [undefined, CommandResult];
+  rescanDevices: [undefined, CommandResult];
   identify: [IdentifyRequest, CommandResult];
 }

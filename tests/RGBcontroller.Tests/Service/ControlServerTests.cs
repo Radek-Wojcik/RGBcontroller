@@ -229,6 +229,12 @@ public sealed class ControlServerTests
 
         public string? ReopenStrip() => null;
 
+        public LogTail GetLogTail(string component, int lines) => new("x.log", []);
+
+        public string? RestartOpenRgb() => null;
+
+        public string? RescanDevices() => null;
+
         public (IdentifyRequest Request, TimeSpan Duration)? LastIdentify { get; private set; }
 
         public string? Identify(IdentifyRequest request, TimeSpan duration)

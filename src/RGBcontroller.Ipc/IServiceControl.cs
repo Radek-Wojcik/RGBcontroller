@@ -82,6 +82,18 @@ public interface IServiceControl
 
     /// <summary>Closes and reopens the strip's serial port (diagnostics when the LED box stops reacting) (since 1.6).</summary>
     Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken);
+
+    /// <summary>The last lines of the Service's newest log, for the diagnostics page (since 1.11).</summary>
+    Task<LogTail> GetLogTailAsync(LogTailRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stops the Service's own OpenRGB and starts it again at once, then lights every device (diagnostics when a device
+    /// stops reacting) (since 1.11).
+    /// </summary>
+    Task<CommandResult> RestartOpenRgbAsync(CancellationToken cancellationToken);
+
+    /// <summary>Asks the running OpenRGB to detect devices again and re-applies the lighting (since 1.11).</summary>
+    Task<CommandResult> RescanDevicesAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Notifications the Service sends to subscribed clients (JSON-RPC notifications, no reply).</summary>
@@ -181,6 +193,16 @@ public sealed record DeviceColors(int Index, byte[] Rgb);
 /// <param name="Count">LEDs in the range.</param>
 /// <param name="Seconds">How long the range stays lit (1-300); 0 returns to the profile.</param>
 /// <summary>Strip LEDs to light for the layout wizard; indices past the strip are ignored.</summary>
+/// <param name="Component">Only "service" for now: the Agent and UI log in the user profile, which the Service cannot read.</param>
+/// <param name="Lines">How many of the last lines to return, 1 to <see cref="LogTailRequest.MaxLines"/>.</param>
+public sealed record LogTailRequest(string Component, int Lines)
+{
+    public const int MaxLines = 500;
+}
+
+/// <param name="File">Name of the log file the lines come from; empty when there is none yet.</param>
+public sealed record LogTail(string File, string[] Lines);
+
 public sealed record StripMarkerRequest(int Start, int Count, int Seconds);
 
 public sealed record IdentifyRequest(int DeviceIndex, string? Zone, int Start, int Count, int Seconds);

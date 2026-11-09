@@ -325,6 +325,32 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         return null;
     }
 
+    public string? RestartOpenRgb()
+    {
+        if (Supervisor is null)
+        {
+            return "OpenRGB is not managed by the Service right now.";
+        }
+
+        _log.Information("OpenRGB restart requested by a client");
+        Supervisor.RequestRestart();
+        return null;
+    }
+
+    public string? RescanDevices()
+    {
+        if (Supervisor is null)
+        {
+            return "OpenRGB is not managed by the Service right now.";
+        }
+
+        _log.Information("Device rescan requested by a client");
+        Supervisor.RequestRescan();
+        return null;
+    }
+
+    public LogTail GetLogTail(string component, int lines) => LogTailReader.Read(_paths.LogDirectory, component, lines);
+
     public string? Identify(IdentifyRequest request, TimeSpan duration)
     {
         if (_lighting is null)
