@@ -84,6 +84,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (result.success) {
           if (result.restartRequired) notify("info", "Saved. Some changes apply after the Service restarts.");
           await loadConfig();
+          // A new header LED count is applied by OpenRGB a moment later; pick up the resized device list.
+          for (const delay of [1500, 4000]) setTimeout(() => void bridge.call("getDevices").then(setDevices, () => {}), delay);
           return true;
         }
 

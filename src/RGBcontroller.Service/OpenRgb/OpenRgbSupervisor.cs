@@ -58,6 +58,7 @@ internal sealed class OpenRgbSupervisor
     private readonly SupervisorTimings _timings;
     private readonly ILogger _log;
     private readonly SemaphoreSlim _deviceListChanged = new(0, 1);
+    private volatile IReadOnlyList<ZoneSizeConfig> _zoneSizes;
     private readonly SemaphoreSlim _resumed = new(0, 1);
     private readonly SemaphoreSlim _usbArrived = new(0, 1);
     private readonly HashSet<string> _litDevices = [];
@@ -70,6 +71,7 @@ internal sealed class OpenRgbSupervisor
     {
         _launcher = launcher;
         _config = config;
+        _zoneSizes = config.ZoneSizes;
         _sink = sink;
         _clock = clock;
         _log = log.ForContext<OpenRgbSupervisor>();
@@ -97,6 +99,16 @@ internal sealed class OpenRgbSupervisor
 
     /// <summary>Raised after each successful (re)apply with the device count.</summary>
     public event Action<int>? DevicesApplied;
+
+    /// <summary>
+    /// New LED counts for resizable zones (mapping wizard): the supervisor loop re-applies the lighting, which resizes
+    /// the zones that differ, so no Service restart is needed.
+    /// </summary>
+    public void UpdateZoneSizes(IReadOnlyList<ZoneSizeConfig> sizes)
+    {
+        _zoneSizes = sizes;
+        SignalDeviceListChanged();
+    }
 
     /// <summary>
     /// The PC woke from sleep or hibernation. Devices come back in their power-on state (RAM rainbow, GPU dark) and
@@ -216,7 +228,7 @@ internal sealed class OpenRgbSupervisor
             client.Disconnected += cause => disconnected.TrySetResult(cause);
             client.DeviceListUpdated += SignalDeviceListChanged;
 
-            lighting = new DeviceLighting(client, _config, _sink, _clock, _litDevices, _log);
+            lighting = new DeviceLighting(client, _config, _sink, _clock, _litDevices, _log) { ZoneSizes = _zoneSizes };
             await lighting.ApplyAllAsync(stopToken).ConfigureAwait(false);
             State = ComponentState.Ok;
             DevicesApplied?.Invoke(lighting.Devices.Count);

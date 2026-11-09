@@ -180,6 +180,7 @@ public sealed class ControlServerTests
         Assert.False(LightingHost.NeedsRestart(current, current with { Capture = new ScreenCaptureConfig { Gamma = 2.2 } }));
         Assert.True(LightingHost.NeedsRestart(current, current with { Strip = current.Strip with { LedCount = 133 } }));
         Assert.True(LightingHost.NeedsRestart(current, current with { OpenRgb = current.OpenRgb with { Port = 7000 } }));
+        Assert.False(LightingHost.NeedsRestart(current, current with { OpenRgb = current.OpenRgb with { ZoneSizes = [new("D", "Z", 12)] } }));
     }
 
     private sealed class EventSink : IServiceEvents

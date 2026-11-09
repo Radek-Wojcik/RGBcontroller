@@ -20,6 +20,9 @@ internal sealed class DeviceLighting(
     private readonly HashSet<string> _litDevices = litDevices;
     private readonly List<int> _ledCounts = [];
 
+    /// <summary>LED counts to apply to resizable zones; replaceable at runtime (wizard), read on the next apply.</summary>
+    public IReadOnlyList<ZoneSizeConfig> ZoneSizes { get; set; } = openRgb.ZoneSizes;
+
     /// <summary>Devices from the last successful <see cref="ApplyAllAsync"/>.</summary>
     public IReadOnlyList<ControllerData> Devices { get; private set; } = [];
 
@@ -77,7 +80,7 @@ internal sealed class DeviceLighting(
         for (var zoneIndex = 0; zoneIndex < data.Zones.Count; zoneIndex++)
         {
             var zone = data.Zones[zoneIndex];
-            var wanted = openRgb.ZoneSizes.FirstOrDefault(z =>
+            var wanted = ZoneSizes.FirstOrDefault(z =>
                 string.Equals(z.Device, data.Name, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(z.Zone, zone.Name, StringComparison.OrdinalIgnoreCase));
             if (wanted is null || zone.LedsCount == wanted.Leds)

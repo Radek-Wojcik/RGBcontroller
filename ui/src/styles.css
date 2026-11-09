@@ -112,13 +112,15 @@ main { flex: 1; overflow: auto; padding: 20px 24px 40px; }
 .tiles {
   display: grid; gap: 14px;
   grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
-  align-items: start;
+  align-items: stretch;
 }
 
 .panel {
   --clip: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
   padding: 1px; background: var(--line); clip-path: var(--clip);
 }
+.panel { display: flex; flex-direction: column; }
+.panel-body { flex: 1; }
 .panel.wide { grid-column: span 2; }
 .panel.is-active, .panel:focus-within { background: linear-gradient(135deg, var(--accent), var(--line-2) 35%, var(--line)); }
 .panel.is-off .panel-body { opacity: 0.72; }
@@ -297,13 +299,14 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* ---------- live LEDs of a device group ---------- */
 
-.group-leds { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: #05070a; border: 1px solid var(--line); }
+.group-leds { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 6px 22px; padding: 8px; background: #05070a; border: 1px solid var(--line); }
 .led-zone { display: flex; flex-direction: column; gap: 4px; }
 .led-zone-name { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
 .led-zone i, .led-keys i, .led-ring i { display: block; aspect-ratio: 1; border-radius: 50%; background: #11161f; border: 1px solid var(--line); }
 .led-parts { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
 .led-line { display: grid; gap: 3px; }
 .led-line i { width: 10px; }
+.led-line.long { grid-template-columns: repeat(auto-fill, 10px); max-width: 100%; }
 .led-line.vertical { grid-template-columns: 10px; }
 .led-ring { position: relative; flex: none; }
 .led-ring i { position: absolute; width: 9px; transform: translate(-50%, -50%); }
