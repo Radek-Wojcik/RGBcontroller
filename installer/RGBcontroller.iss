@@ -21,6 +21,9 @@ DefaultDirName={autopf}\RGBcontroller
 DefaultGroupName=RGBcontroller
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
+; The Agent autostart goes into HKCU of the user who runs the setup (the one who will use the PC); the warning about
+; per-user areas in an elevated setup is known and accepted.
+UsedUserAreasWarning=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=Output
