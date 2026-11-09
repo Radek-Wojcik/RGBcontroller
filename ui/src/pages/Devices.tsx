@@ -9,7 +9,7 @@ const ZONE_TYPES: Record<number, string> = { 0: "single", 1: "linear", 2: "matri
 /** What OpenRGB detected and which group drives each zone. The mapping wizard (SPEC 7.4) builds on this page. */
 export function Devices() {
   const { devices, snapshot } = useStore();
-  const [wizard, setWizard] = useState(false);
+  const [wizard, setWizard] = useState(() => new URLSearchParams(location.search).has("wizard")); // ?wizard opens it directly (documentation screenshots)
   if (!devices || !snapshot) return <Empty>Waiting for the Service...</Empty>;
   if (devices.devices.length === 0) return <Empty>No OpenRGB devices are attached right now (OpenRGB starting or rescanning).</Empty>;
   const groups = snapshot.config.lighting.groups;

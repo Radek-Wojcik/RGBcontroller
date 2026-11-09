@@ -41,6 +41,8 @@ LicenseFile=..\LICENSE
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "..\tools\InstallPreflight.ps1"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 ; Extracted early for the checks in InitializeSetup.
 Source: "..\tools\InstallPreflight.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 

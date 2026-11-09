@@ -336,3 +336,9 @@ button.danger { border-color: var(--bad, #e5484d); color: var(--bad, #e5484d); }
 .tile-tools button.ghost { padding: 0 5px; min-width: 0; line-height: 1.4; font-size: 11px; }
 .drag-handle { cursor: grab; padding: 0 4px; color: var(--dim); user-select: none; }
 .drag-handle:active { cursor: grabbing; }
+
+/* palette editor: the position fields keep an invisible (screen reader) label and a narrow column */
+.palette-grid .field > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.palette-grid td:first-child { width: 70px; }
+.palette-grid td:nth-child(2) { width: 160px; }
+.palette-grid td:last-child { text-align: left; }

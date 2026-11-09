@@ -59,7 +59,7 @@ export function PaletteEditor() {
       {renaming !== null && (taken(renaming.trim()) || renaming.trim().startsWith("#")) &&
         <p className="dim">A palette name must be unused and cannot start with "#".</p>}
 
-      <table className="grid">
+      <table className="grid palette-grid">
         <thead><tr><th>Color</th><th>Position (0 to 1)</th><th /></tr></thead>
         <tbody>
           {palette.stops.map((s, i) => (
