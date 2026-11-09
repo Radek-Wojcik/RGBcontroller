@@ -11,6 +11,6 @@
     <Product>RGBcontroller</Product>
     <Company>RGBcontroller</Company>
     <Copyright>Copyright (c) 2026 Radek Wojcik</Copyright>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
   </PropertyGroup>
 </Project>
