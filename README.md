@@ -2,11 +2,11 @@
 
 Windows controller for PC RGB lighting and an Adalight ambilight strip: synchronized effects on every OpenRGB device, a screen-mirroring strip behind the monitor, and a background service that replaces OpenRGB's Effects plugin (about 2.6% CPU).
 
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![React 19](https://img.shields.io/badge/UI-React_19_%2B_WebView2-149ECA) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Status: stage 6 of 6](https://img.shields.io/badge/status-stage_6_of_6-orange) [![CI](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml/badge.svg)](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![React 19](https://img.shields.io/badge/UI-React_19_%2B_WebView2-149ECA) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Release 1.0](https://img.shields.io/badge/release-1.0-brightgreen) [![CI](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml/badge.svg)](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml)
 
-<img src="docs/assets/ui-dashboard.png" alt="Dashboard: the ambilight tile draws the strip's 133 LEDs around the monitor in their live colors; tiles for pump and fans, motherboard, RAM, keyboard, mouse and GPU set effect, palette, speed, wave length, brightness and frame rate" width="900">
+<img src="docs/assets/dashboard.png" alt="Dashboard: the ambilight tile draws the strip's 133 LEDs around the monitor in their live colors; tiles for pump and fans, motherboard, RAM, keyboard, mouse and GPU set effect, palette, speed, wave length, brightness and frame rate" width="900">
 
-> **Status: stage 6 of 6, in progress.** The Service, the tray Agent with screen ambilight and hotkeys, and the UI (with the mapping and strip layout wizards, palette editor and profile management) run on the author's PC. The installer script and its checks are written but not yet tested on a clean install; until then installation is a developer install from source, and the default device mapping is the author's hardware (see [Hardware configuration](#hardware-configuration)). Design notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+> **Release 1.0.** The Service, the tray Agent with screen ambilight and hotkeys, the UI (device and strip wizards, palette editor, profile management, diagnostics) and the installer run on the author's PC. The default device mapping is the author's hardware; every part of it can be changed in the UI (see [Hardware configuration](#hardware-configuration)). Design notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Screenshots are taken from the UI running on stand-in data, so every device shows animated colors.
 
 ## Key features
 
@@ -24,7 +24,7 @@ Windows controller for PC RGB lighting and an Adalight ambilight strip: synchron
 - **Lit before you log in, with exactly one OpenRGB**: a LocalSystem service lights the strip about 13 s and every OpenRGB device about 17 s after boot, supervising a pinned OpenRGB 1.0rc2 without plugins, bound to `127.0.0.1`, in a kill-on-close job object.
 - **Tray, hotkeys and a UI that is not resident**: global hotkeys through `RegisterHotKey` (no keyboard hook) with an on-screen note of what changed, a dark tray menu, and a WebView2 window that is started on demand and leaves nothing running when closed.
 
-<img src="docs/assets/ui-ambilight.png" alt="Ambilight page: the strip layout drawn around the screen with the first LED ringed, start corner, direction, LEDs per edge, first LED position and dark LEDs, plus response and picture settings" width="900">
+<img src="docs/assets/ambilight.png" alt="Ambilight page: the strip layout drawn around the screen with the first LED ringed, start corner, direction, LEDs per edge, first LED position and dark LEDs, plus response and picture settings" width="900">
 
 ## Tech stack
 
@@ -54,6 +54,13 @@ flowchart LR
 Only the Service touches hardware. It runs without a logged-in user, so lighting starts on the logon screen. The Agent captures the screen and sends strip colors to the Service; the UI edits the configuration through the Service, which validates and saves it. The full specification is in [docs/SPECIFICATION.md](docs/SPECIFICATION.md).
 
 ## Getting started
+
+### Install a release
+
+Download `RGBcontroller-Setup-<version>.exe` from the [Releases](https://github.com/Radek-Wojcik/RGBcontroller/releases) page and run it as administrator. It needs the [PawnIO](https://pawnio.eu) driver and the WebView2 runtime (both are checked first), installs the Service, the Agent and the UI, and asks before it turns off another OpenRGB or AmbiBox autostart. The installer is not code-signed, so Windows SmartScreen may warn; compare the SHA-256 on the release page with the file you downloaded. Uninstall from Windows Settings; it restores what it turned off and asks whether to keep your settings.
+
+### Build from source
+
 
 Requirements:
 - Windows 10 or 11 (developed on Windows 10 22H2).
@@ -125,7 +132,15 @@ Open it from the tray, the Desktop shortcut or the Start menu. Closing the windo
 | Hotkeys | Record combinations and assign actions |
 | Settings | Devices turned off when the display goes off (unlocked and locked), strip port, LED count and current limit, diagnostics (rescan devices, reconnect the strip, restart OpenRGB, Service log), accent color |
 
-<img src="docs/assets/ui-profiles.png" alt="Profiles page: Rainbow, Cyberpunk, Aurora, Night, Solid White and Logon cards with palette stripes, effects per group, master brightness and buttons to activate or use on the logon screen or when locked" width="900">
+<img src="docs/assets/profiles.png" alt="Profiles page: Rainbow, Cyberpunk, Aurora, Night, Solid White and Logon cards with palette stripes, effects per group, master brightness and buttons to activate or use on the logon screen or when locked" width="900">
+
+<img src="docs/assets/devices.png" alt="Devices page: HyperX RAM, Gigabyte GPU, ASUS motherboard with three addressable headers, Razer keyboard and Logitech mouse with their zones, LED counts, shapes and groups" width="900">
+
+<img src="docs/assets/mapping-wizard.png" alt="Mapping wizard: pick a header, light it LED by LED to count the LEDs, split it into ring and line parts and set the direction and the LED on top" width="900">
+
+<img src="docs/assets/strip-wizard.png" alt="Strip layout wizard: the drawn strip shows the colors the Service lights, three steps set the start, the direction and the LEDs per edge" width="900">
+
+<img src="docs/assets/settings.png" alt="Settings page: turn-off sets for the display, strip hardware, diagnostics with rescan, reconnect and restart buttons, and the Service log" width="900">
 
 ### Setting up the strip
 
@@ -212,14 +227,16 @@ docs/                      specification, spike reports with hardware results, s
 
 ## Roadmap
 
-Each stage ends with a hardware test gate on the target PC.
+Every stage passed its hardware test gate on the author's PC except where noted.
 
 1. ~~**Service + OpenRGB supervisor + Adalight**~~ Done (`v0.1.0-stage1`).
 2. ~~**Effect engine**~~ Done (`v0.2.0-stage2`).
 3. ~~**Power and session handling**~~ Done (`v0.3.0-stage3`).
-4. **Agent and ambilight**: built; hardware gate in progress.
-5. ~~**UI**~~ Built: live previews, both wizards, palette editor, profile management, diagnostics and tile arrangement; hardware gate pending.
-6. **Installer and hardening**: the Inno Setup script (`installer/`), the preflight checks and this architecture write-up are in; a clean install and uninstall on the target PC is the gate.
+4. ~~**Agent and ambilight**~~ Done.
+5. ~~**UI**~~ Done (`v0.5.0`).
+6. ~~**Installer and hardening**~~ Done: clean install, uninstall, reinstall and crash recovery are tested ([docs/spikes/stage6-hardening.md](docs/spikes/stage6-hardening.md)). The full sleep, hibernate and display cycle checklist was not repeated for the installed build.
+
+Ideas beyond 1.0: a code-signed installer, bundling the WebView2 bootstrapper, per-game profiles, and more device types.
 
 ## Contributing
 
@@ -227,7 +244,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT; see [LICENSE](LICENSE). OpenRGB is a separate project under its own license and is not part of this repository.
+MIT; see [LICENSE](LICENSE). The installer also ships an unmodified OpenRGB (GPL 2) and the libraries that come with it; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). OpenRGB is a separate project and is not part of this repository.
 
 ## Author
 
