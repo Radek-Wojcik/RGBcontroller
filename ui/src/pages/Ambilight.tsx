@@ -15,7 +15,7 @@ const CORNER_LABELS: Record<StripCorner, string> = { TopLeft: "Top left", TopRig
 export function Ambilight() {
   const { state, snapshot, editConfig, run } = useStore();
   const live = useStripColors();
-  const [wizard, setWizard] = useState(false);
+  const [wizard, setWizard] = useState(() => new URLSearchParams(location.search).has("wizard")); // ?wizard opens it directly (documentation screenshots)
   if (!state || !snapshot) return <Empty>Waiting for the Service...</Empty>;
   const config = snapshot.config;
   const layout = config.strip.layout;
