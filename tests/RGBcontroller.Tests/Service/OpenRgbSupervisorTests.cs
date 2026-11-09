@@ -257,6 +257,51 @@ public sealed class OpenRgbSupervisorTests
         Assert.True(launcher.Processes[0].Killed);
     }
 
+    [Fact]
+    public async Task RequestRestart_RestartsOpenRgbAtOnceWithoutTheFailureBackoff()
+    {
+        await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard());
+        // A crash would wait a minute before the restart; a requested restart must not.
+        var timings = FastTimings with { RestartBackoff = _ => TimeSpan.FromMinutes(1) };
+        await using var run = Start(server, out var supervisor, out var launcher, timings);
+        await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
+
+        supervisor.RequestRestart();
+        server.DropAllClients();
+
+        await WaitUntilAsync(() => launcher.Starts == 2 && supervisor.State == ComponentState.Ok);
+        Assert.True(launcher.Processes[0].Killed);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.Equal(2, launcher.Starts);
+    }
+
+    [Fact]
+    public async Task RequestRestart_WithoutARunningOpenRgbDoesNothing()
+    {
+        var launcher = new FakeLauncher();
+        var supervisor = new OpenRgbSupervisor(launcher, new OpenRgbConfig(), NullSink.Instance, new StartupClock(), Logger.None, FastTimings);
+
+        supervisor.RequestRestart();
+
+        Assert.Equal(0, launcher.Starts);
+    }
+
+    [Fact]
+    public async Task RequestRescan_RescansNowWithoutTheResumeDelay()
+    {
+        await using var server = new FakeOpenRgbServer(5, ControllerDataWriter.Keyboard());
+        var launcher = new FakeLauncher();
+        var config = new OpenRgbConfig { Port = server.Port, DeviceSettleMilliseconds = 100, ResumeRescanDelayMilliseconds = 30_000 };
+        var supervisor = new OpenRgbSupervisor(launcher, config, NullSink.Instance, new StartupClock(), Logger.None, FastTimings);
+        await using var run = new RunningSupervisor(supervisor);
+        await WaitUntilAsync(() => supervisor.State == ComponentState.Ok);
+
+        supervisor.RequestRescan();
+
+        await WaitUntilAsync(() => Volatile.Read(ref server.RescanRequests) == 1, TimeSpan.FromSeconds(3));
+        Assert.Equal(1, launcher.Starts);
+    }
+
     private static RunningSupervisor Start(
         FakeOpenRgbServer server, out OpenRgbSupervisor supervisor, out FakeLauncher launcher, SupervisorTimings? timings = null)
     {
