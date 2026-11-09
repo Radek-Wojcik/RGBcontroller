@@ -280,6 +280,11 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
                 _lighting?.SetStripLayout(new StripLayout(config.Strip.Layout, current.Strip.LedCount));
             }
 
+            if (!config.OpenRgb.ZoneSizes.SequenceEqual(current.OpenRgb.ZoneSizes))
+            {
+                Supervisor?.UpdateZoneSizes(config.OpenRgb.ZoneSizes);
+            }
+
             if (config != current)
             {
                 Commit(config);
@@ -305,7 +310,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     /// <summary>Changes the running Service cannot apply: strip hardware (layout aside), OpenRGB and logging.</summary>
     internal static bool NeedsRestart(AppConfig current, AppConfig next) =>
         next.Strip with { Layout = current.Strip.Layout } != current.Strip
-        || next.OpenRgb != current.OpenRgb
+        || next.OpenRgb with { ZoneSizes = current.OpenRgb.ZoneSizes } != current.OpenRgb
         || next.Logging != current.Logging;
 
     public string? ReopenStrip()

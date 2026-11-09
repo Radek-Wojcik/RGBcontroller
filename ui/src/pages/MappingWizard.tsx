@@ -97,7 +97,7 @@ function ZoneEditor({ pick }: { pick: Pick }) {
   return (
     <>
       <div className="group-leds" aria-label="Live colors of the zone">
-        <div className="led-zone" style={{ gridTemplateColumns: `repeat(${Math.min(zone.ledCount, 30)}, 1fr)` }}>
+        <div className="led-line long">
           {Array.from({ length: zone.ledCount }, (_, i) => {
             const at = (zoneStart + i) * 3;
             const [r, g, b] = live ? [live[at], live[at + 1], live[at + 2]] : [0, 0, 0];
@@ -129,7 +129,7 @@ function ZoneEditor({ pick }: { pick: Pick }) {
             <NumberField label="Or type the LED count" value={configuredSize ?? zone.ledCount} min={1} max={MAX_HEADER_LEDS}
               onCommit={leds => editConfig(c => applyZoneSize(c, device.name, zone.name, leds))} />
           </div>
-          <p className="dim">OpenRGB applies a new count when it detects the devices again (after sleep or a Service restart).</p>
+          <p className="dim">A new count applies at once; the lights may blink for a moment while OpenRGB resizes the header.</p>
         </section>
       )}
 
