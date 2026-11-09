@@ -44,6 +44,17 @@ try {
     Assert ((Get-ItemProperty $runKey -Name 'OpenRGB_Auto').OpenRGB_Auto -eq '"C:\Program Files\OpenRGB\OpenRGB.exe" --startminimized') 'restore brings the Run value back unchanged'
     Assert (Test-Path (Join-Path $startup 'AmbiBox.lnk')) 'restore brings the shortcut back'
     Assert (-not (Test-Path $stateFile)) 'restore removes the state file'
+
+    # Exit codes the installer reacts to: 0 fine, 2 PawnIO missing, 3 WebView2 missing (PawnIO wins when both are).
+    function ExitCodeOf([string]$simulate) {
+        $extra = if ($simulate) { @('-Simulate', $simulate) } else { @() }
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Check @common @extra | Out-Null
+        return $LASTEXITCODE
+    }
+    Assert ((ExitCodeOf '') -eq 0) 'exit code 0 when PawnIO and WebView2 are present'
+    Assert ((ExitCodeOf 'PawnIoMissing') -eq 2) 'exit code 2 when PawnIO is missing'
+    Assert ((ExitCodeOf 'WebView2Missing') -eq 3) 'exit code 3 when only WebView2 is missing'
+    Assert ((ExitCodeOf 'PawnIoMissing,WebView2Missing') -eq 2) 'PawnIO is reported first when both are missing'
 }
 finally {
     Remove-Item 'HKCU:\Software\RGBcontrollerPreflightTest' -Recurse -Force -ErrorAction SilentlyContinue
@@ -52,3 +63,5 @@ finally {
 
 if ($failures -gt 0) { Write-Host "$failures check(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'All preflight checks passed.' -ForegroundColor Green
+
+exit 0
