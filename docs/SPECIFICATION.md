@@ -1,9 +1,9 @@
 # RGBcontroller: Product and Engineering Specification
 
-Version: 1.0 spec, 2026-10-30. Owner: Radek (single user, one machine, hardware configurable via settings).
-Language of UI, code, comments, commits and docs: **English**.
+Version: 1.0 spec, 2026-10-30. Author: Radek Wójcik (single user, one machine, hardware configurable via settings).
+Language of UI, code, comments, commits and docs: **English**. Code comments cite sections of this document as `SPEC x.y`.
 
-This document is the single source of truth for building the app. Files in `reference/` are evidence from earlier hardware tests and must not be re-derived. Items marked **[VERIFY]** are technical assumptions that must be confirmed by a short spike before building on them. Items marked **[DECISION]** are choices the owner delegated ("don't care, it must just work"); they are binding unless a spike proves them impossible, in which case stop and ask.
+This document is the requirements and design reference of the app. Hardware facts were measured on the author's PC in earlier tests; the results that matter are summarized in section 2 and in [spikes/](spikes/). Items marked **[VERIFY]** are technical assumptions that were confirmed by a short spike before building on them. Items marked **[DECISION]** are design choices that hold unless a spike proves them impossible.
 
 ---
 
@@ -21,8 +21,8 @@ Working name and product name: **RGBcontroller**.
 
 ### Non-goals (v1)
 
-- Fan/pump speed control (FanControl stays; never write fan registers; the earlier risk analysis is in `reference/Turbo-App-stan-projektu.md` section 2).
-- Audio control, taskbar tweaks, cloud, telemetry, auto-update, multi-monitor ambilight, per-application auto profile switching (process watching adds background load, owner said avoid).
+- Fan/pump speed control (FanControl stays; never write fan registers; the risks are why this project never writes fan registers).
+- Audio control, taskbar tweaks, cloud, telemetry, auto-update, multi-monitor ambilight, per-application auto profile switching (process watching adds background load, author said avoid).
 - Writing our own hardware drivers or any direct SMBus/I2C code. All hardware except the Adalight strip goes through OpenRGB.
 - Firmware writes ("save to device") are not used by default.
 
@@ -38,7 +38,7 @@ Working name and product name: **RGBcontroller**.
 | GPU | Gigabyte RTX 3080 12G Gaming OC |
 | Monitor | AOC AGON PRO AG326UD, 31.5", 3840x2160, 165 Hz, QD-OLED, HDR. Mostly SDR; HDR only sometimes in games. |
 | OpenRGB | 1.0rc2 (v0.9+, commit 0fca93e, 2025-09-14). Uses the **PawnIO** driver for SMBus (already installed and working). |
-| Polish-locale pitfall | `typeperf`/`Get-Counter` with English counter names do not work. Use the `NtQuerySystemInformation` approach in `reference/Measure-TrayTools.ps1` for every CPU measurement. Task Manager shows ~1.8x higher numbers for the same process (different normalization); always compare with the same tool. |
+| Polish-locale pitfall | `typeperf`/`Get-Counter` with English counter names do not work. Use `tools/Measure-RGBcontroller.ps1` (the `NtQuerySystemInformation` approach) for every CPU measurement. Task Manager shows ~1.8x higher numbers for the same process (different normalization); always compare with the same tool. |
 
 ### RGB device inventory (from OpenRGB profile and logs; detection takes ~6 s)
 
@@ -46,13 +46,13 @@ Working name and product name: **RGBcontroller**.
 |---|---|
 | HyperX Predator RGB (DRAM) | I2C `i801` addr 0x27, 4 slots (DDR4), **5 LEDs per slot (20 total)**, modes: Direct, Static, Rainbow, Heartbeat, Spectrum Cycle, Breathing, Bounce. Sticks stand **vertically** relative to the desk. |
 | Gigabyte RTX 3080 12G Gaming OC | RGB Fusion GPU device via NvAPI I2C, addr 0x62, one zone, one LED, modes Direct, Breathing, Flashing, Dual Flashing, Color Cycle, Spectrum Cycle. **[VERIFY]** NvAPI I2C works from Session 0 (see risk R1). |
-| ASUS TUF GAMING H670-PRO WIFI D4 (Aura USB, VID 0B05 PID 19AF) | Zones: **Aura Addressable 1/2/3, 20 LEDs each**; Aura Mainboard RGB Header 1/2/3 (12 V). The AIO pump and fans are on the addressable headers, **exact assignment unknown** (owner does not know; the mapping wizard resolves it, see 7.4). |
+| ASUS TUF GAMING H670-PRO WIFI D4 (Aura USB, VID 0B05 PID 19AF) | Zones: **Aura Addressable 1/2/3, 20 LEDs each**; Aura Mainboard RGB Header 1/2/3 (12 V). The AIO pump and fans are on the addressable headers, **exact assignment unknown** (author does not know; the mapping wizard resolves it, see 7.4). |
 | Razer Ornata Chroma V2 (VID 1532 PID 025D) | Keyboard, OpenRGB full 104-key ANSI matrix, 6 rows x 21 columns. |
-| Logitech G502 HERO | Primary + Logo zones (1 LED each). Backlight currently off by owner choice, but the device is controllable. |
+| Logitech G502 HERO | Primary + Logo zones (1 LED each). Backlight currently off by author choice, but the device is controllable. |
 
 Software left running next to us, untouched: FanControl, EarTrumpet, TranslucentTB. AmbiBox is installed but unused (`C:\Program Files (x86)\AmbiBox`); it must not run (it would fight for COM3).
 
-### Adalight ambilight driver (verified, see `reference/Test-Adalight.ps1`)
+### Adalight ambilight driver (verified on the hardware)
 
 | Parameter | Value |
 |---|---|
@@ -72,7 +72,7 @@ All of the above values are **settings** with these defaults (port, LED count, b
 
 ## 3. Architecture [DECISION]
 
-Three executables plus a pinned OpenRGB. One hardware owner, small always-on parts, rich UI only on demand.
+Three executables plus a pinned OpenRGB. One hardware author, small always-on parts, rich UI only on demand.
 
 ```
  boot ──► RGBcontroller.Service  (LocalSystem, auto start, no UI, ALWAYS running)
@@ -92,7 +92,7 @@ Three executables plus a pinned OpenRGB. One hardware owner, small always-on par
 
 Rules:
 
-- **Only the Service touches hardware.** The Agent never opens COM3 or the OpenRGB socket. It sends captured strip colors (113 x 3 bytes, <=30 Hz) over IPC; the Service writes them to COM3. This guarantees one owner and lets the strip stay lit on the logon screen.
+- **Only the Service touches hardware.** The Agent never opens COM3 or the OpenRGB socket. It sends captured strip colors (113 x 3 bytes, <=30 Hz) over IPC; the Service writes them to COM3. This guarantees one author and lets the strip stay lit on the logon screen.
 - The Service must be fully functional with no user logged in and no Agent running: effects, strip fallback mode, power handling.
 - The Agent exists only because screen capture, hotkeys and the tray need an interactive session.
 - The UI is launched from the tray ("Open RGBcontroller") or a Start menu shortcut. It is never resident. Closing the window ends the process. Live preview is streamed by the Service only while a UI is subscribed.
@@ -108,7 +108,7 @@ Rules:
 - Logging: Serilog (or Microsoft.Extensions.Logging with file sink), rolling files in `%ProgramData%\RGBcontroller\logs`.
 - IPC: named pipes, JSON-RPC (StreamJsonRpc) for control; a separate stream pipe for preview frames and ambilight frames. **Pipe ACL**: SYSTEM and Administrators full control, interactive users may connect but the command surface exposes only app operations (no arbitrary paths, no process launch, validated inputs). Protocol is versioned; mismatched Service/UI/Agent versions must be detected and reported, not crash.
 - Config: JSON, schema-versioned with migrations, atomic write (temp file + replace), stored in `%ProgramData%\RGBcontroller\config\`. Only the Service writes it; UI asks the Service to change it.
-- Installer: Inno Setup or WiX. Ships a **pinned OpenRGB 1.0rc2** inside the install folder (`{app}\openrgb\`), registers the Service, the Agent autostart (logon, per user, non-elevated), Start menu shortcut, and cleans up on uninstall. Detects the PawnIO driver and fails with a clear message if missing. Detects the owner's existing OpenRGB autostart entry (Task Scheduler task / Run key / Startup folder) and **offers to disable it (never deletes it silently)**. Also detects AmbiBox autostart and offers the same.
+- Installer: Inno Setup or WiX. Ships a **pinned OpenRGB 1.0rc2** inside the install folder (`{app}\openrgb\`), registers the Service, the Agent autostart (logon, per user, non-elevated), Start menu shortcut, and cleans up on uninstall. Detects the PawnIO driver and fails with a clear message if missing. Detects the author's existing OpenRGB autostart entry (Task Scheduler task / Run key / Startup folder) and **offers to disable it (never deletes it silently)**. Also detects AmbiBox autostart and offers the same.
 
 ### OpenRGB supervision (Service) [DECISION]
 
@@ -122,16 +122,16 @@ Rules:
 
 ---
 
-## 4. Power, session and display behavior (owner requirements)
+## 4. Power, session and display behavior (author requirements)
 
-Everything must work with **zero duplicate OpenRGB instances and no visible flicker** after sleep (the owner's current problem is blinking LEDs after a second instance appears).
+Everything must work with **zero duplicate OpenRGB instances and no visible flicker** after sleep (the author's current problem is blinking LEDs after a second instance appears).
 
 | State | Behavior |
 |---|---|
 | Boot, logon screen (no user) | Service already running. Apply the **Logon profile** (separate profile, default: calm rainbow on everything, strip in radial rainbow because screen capture is impossible). Keyboard must be lit here. |
 | User logged in | Agent starts, applies the **Active profile**. Strip in Screen mode if selected. |
 | Locked, display on | Everything stays lit using the **Lock profile** (default: same as active profile, but Screen-mode strip is replaced by its configured fallback because capture is unavailable). |
-| Locked, display off | Turn off the strip, keyboard and mouse by default (these are the owner's choices; the set is configurable). |
+| Locked, display off | Turn off the strip, keyboard and mouse by default (these are the author's choices; the set is configurable). |
 | Display off (unlocked, idle timeout) | Turn off the strip by default; the remaining devices optionally (per-device checkboxes in settings: "turn off when display is off"). Restore when the display turns on (mouse move etc.). |
 | Sleep / hibernate | Before suspend: stop effects and send black to everything (strip and OpenRGB devices). On resume: wait for USB devices to settle (configurable delay, start with 3 s), **rescan devices in the single OpenRGB instance**, reapply the right profile for the current session state. |
 | Shutdown | Send black to everything in the shutdown handler. |
@@ -173,15 +173,15 @@ Implementation notes (all **[VERIFY]** by a spike in stage 3, because services a
 
 Palettes are gradients with editable stops (rainbow wheel is just a palette preset). Effects are parameterized; no scripting, no layers (explicitly out of scope: unbounded CPU risk).
 
-### 5.3 Defaults for the owner's current setup ("Rainbow" profile)
+### 5.3 Defaults for the author's current setup ("Rainbow" profile)
 
 - Pump + fans: Radial rainbow. Keyboard (Ornata V2): Wave rainbow, direction right to left. Mouse (G502) and GPU: Color cycle. RAM (4 sticks): Mirror rainbow from the center LED outward, symmetric up and down on every stick. Motherboard onboard zones and headers: follow the nearest group or off (user-choosable).
-- Strip: Screen mode (see section 6). Hardware modes are never used for the synchronized rainbow, because hardware modes cannot be synchronized between devices. Per-device option "use hardware mode" exists only for devices where the owner prefers 0 CPU over sync (RAM especially).
+- Strip: Screen mode (see section 6). Hardware modes are never used for the synchronized rainbow, because hardware modes cannot be synchronized between devices. Per-device option "use hardware mode" exists only for devices where the author prefers 0 CPU over sync (RAM especially).
 
 ### 5.4 Themes and profiles
 
 - A **profile** = complete state: per-device-group effect + palette + params + brightness, ambilight mode + params, master brightness, power policy overrides.
-- Shipped profiles/themes (all pre-mapped to the owner's devices): **Rainbow** (current look), **Cyberpunk** (magenta/cyan/violet neon), **Aurora** (the extra theme), **Night** (dim warm, minimal), **Solid White** (utility). User can create, duplicate, rename, delete, import/export (JSON).
+- Shipped profiles/themes (all pre-mapped to the author's devices): **Rainbow** (current look), **Cyberpunk** (magenta/cyan/violet neon), **Aurora** (the extra theme), **Night** (dim warm, minimal), **Solid White** (utility). User can create, duplicate, rename, delete, import/export (JSON).
 - A profile switches by: UI, tray menu, hotkey. No schedules, no app triggers in v1.
 - Special profiles: **Logon profile** and **Lock profile** (see section 4), editable in the UI like any profile.
 
@@ -207,15 +207,15 @@ Requirements already agreed:
 - Smoothness: capture 20 FPS, output to the strip at ~30 Hz with interpolation/smoothing (separate attack and release time constants, default fast attack and moderate release).
 - **Black = off**: a pure black screen gives exactly (0,0,0), no minimum brightness. A black threshold zeroes near-black values (noise, dithering, banding in films) with a soft knee. Gamma correction makes dark scenes dark. **No trailing glow when fading to black** (when the target is black, decay to zero quickly and snap to 0 below a small epsilon).
 - **Letterbox/pillarbox detection**: cheap detection of black bars on the downscaled frame (a few rows/columns), shifting the sampling region into the picture so the strip shows scene colors instead of black at top/bottom or sides. Toggle in settings, enabled by default; must have hysteresis to avoid flapping.
-- **HDR**: the owner mostly uses SDR, with HDR only sometimes in games. SDR path is primary. When the duplicated frame is FP16/scRGB, tone-map to the SDR range (use the SDR white level, simple robust tone map, clamp) so colors are not blown out. Detect format changes at runtime and rebuild the pipeline.
+- **HDR**: the author mostly uses SDR, with HDR only sometimes in games. SDR path is primary. When the duplicated frame is FP16/scRGB, tone-map to the SDR range (use the SDR white level, simple robust tone map, clamp) so colors are not blown out. Detect format changes at runtime and rebuild the pipeline.
 - DRM-protected content (browsers) produces black frames: documented limitation, no workaround. Exclusive-fullscreen games cannot be duplicated: recommend borderless; on `DXGI_ERROR_ACCESS_LOST` or persistent failure re-create the duplication with back-off and meanwhile signal the Service to show the fallback mode.
 - Process only changed frames; skip work when nothing changed (smoothing still runs if converging). **Capture stops completely (resources released) when mode is not Screen, when the display is off, or when the session is locked.**
 - Color processing order: average -> black threshold -> gamma -> saturation (optional, default 1.0) -> master/strip brightness -> current limiter (estimate = sum of all R, G and B values / 255 x 6.5 mA, from the measured 19.5 mA per LED at full white, i.e. 6.5 mA per channel) -> Adalight frame.
-- **Performance target: ambilight Screen mode, Agent + Service + OpenRGB together under 1% of total CPU** measured with `reference/Measure-TrayTools.ps1` (update its process name list to the new executables).
+- **Performance target: ambilight Screen mode, Agent + Service + OpenRGB together under 1% of total CPU** measured with `tools/Measure-RGBcontroller.ps1`.
 
 ### 6.3 Strip layout
 
-113 LEDs around the monitor. Layout is **not known** (owner will use the wizard). Starting estimate: top ~40, left ~21, right ~21, bottom ~30, possible gap at the stand. The layout model: start corner, direction (clockwise/counterclockwise viewed from the front), LEDs per edge, optional gaps (unused LED indices), per-edge offset. See wizard in 7.5.
+113 LEDs around the monitor. Layout is **not known** (author will use the wizard). Starting estimate: top ~40, left ~21, right ~21, bottom ~30, possible gap at the stand. The layout model: start corner, direction (clockwise/counterclockwise viewed from the front), LEDs per edge, optional gaps (unused LED indices), per-edge offset. See wizard in 7.5.
 
 ---
 
@@ -223,7 +223,7 @@ Requirements already agreed:
 
 ### 7.1 Tray and Agent
 
-- Tray icon with state (ok / degraded / off). Menu: Open RGBcontroller, Profiles (submenu), Ambilight mode (submenu), strip brightness (a slider in the menu using a lightweight owner-drawn WinForms `ToolStripControlHost`/TrackBar in dark style, created lazily; no WebView2 here), Turn everything off/on, Exit Agent.
+- Tray icon with state (ok / degraded / off). Menu: Open RGBcontroller, Profiles (submenu), Ambilight mode (submenu), strip brightness (a slider in the menu using a lightweight author-drawn WinForms `ToolStripControlHost`/TrackBar in dark style, created lazily; no WebView2 here), Turn everything off/on, Exit Agent.
 - One Agent instance per user session (mutex). The Agent is allowed to be absent; nothing lighting-critical depends on it.
 - Memory/CPU idle goal for the Agent: negligible (message loop only; capture pipeline disposed when idle).
 
@@ -240,7 +240,7 @@ Requirements already agreed:
 - Zones not claimed by any group stay off or follow a default group.
 - Settings page: power policy (4), hotkeys, autostart state (Service/Agent), COM port and strip hardware, FPS caps, diagnostics (OpenRGB status, device list with detection time, COM status, log viewer, "restart OpenRGB", "rescan devices"), about/version.
 
-### 7.4 Device mapping wizard (needed, owner does not know the wiring)
+### 7.4 Device mapping wizard (needed, author does not know the wiring)
 
 For the motherboard addressable headers (3 x 20 LEDs): the wizard lights chains/LED ranges one at a time, the user marks which physical component lights up (pump ring, fan N, strip), defines LED counts, ring direction (CW/CCW), start offset, and component type (Ring or Strip). Radial effects use these definitions (hue by angle around each ring). Saved in config and editable later. Same wizard handles RAM orientation (which end is top) and keyboard orientation checks.
 
@@ -250,13 +250,13 @@ Lights the first 3 LEDs green and the last 3 red (as in `Chase` mode of the test
 
 ---
 
-## 8. UI (on demand, WebView2) [DECISION on structure; visual taste is the owner's: "very modern, dark, cyberpunk, tiles like FanControl, lots of personalization, not AI-slop"]
+## 8. UI (on demand, WebView2) [DECISION on structure; visual taste is the author's: "very modern, dark, cyberpunk, tiles like FanControl, lots of personalization, no generic template look"]
 
 - **Look**: dark cyberpunk. Hard-edged panels with clipped/angled corners, neon accents (cyan, magenta, acid yellow as selectable accent), mono-spaced numerics, subtle scanline/grid/noise textures, restrained glow only where it carries meaning (active LEDs, state). Avoid generic purple-gradient hero blobs, glassmorphism clichés, emoji icons, stock chat-bot aesthetics. Real visual hierarchy, dense but readable, keyboard accessible, responsive to window size. Custom window chrome is fine but must support Windows 10 and 11 (no Windows-11-only APIs required; Mica is optional progressive enhancement).
 - **Dashboard of tiles** like FanControl: each tile shows a **live preview of what the device is currently displaying** (real LED colors streamed from the Service at ~20 Hz, only while the UI is open), plus its controls inline. Tiles are draggable, resizable/collapsible, and the layout is saved. Large Ambilight tile: screen thumbnail with the strip drawn around it, mode switcher, brightness slider, solid color/percent.
 - Pages: Dashboard, Devices and Mapping, Ambilight (layout wizard, capture settings, preview), Profiles and Themes, Hotkeys, Settings and Diagnostics.
 - Personalization: accent color, tile arrangement, density; effect parameters per tile (see 7.3).
-- The preview subscription is the only extra load while the UI is open; the owner accepts this.
+- The preview subscription is the only extra load while the UI is open; the author accepts this.
 
 ---
 
@@ -268,7 +268,7 @@ Lights the first 3 LEDs green and the last 3 red (as in `Chase` mode of the test
 4. Strip: estimated current limiter (default 4.5 A), frame never larger than the link can carry, black frames on every stop path (crash handler where feasible, suspend, shutdown, service stop).
 5. Service never runs arbitrary commands received over IPC; inputs validated; pipe ACL as in section 3.
 6. All hardware-state-changing actions are logged. No telemetry, no network access except the loopback connection to the OpenRGB SDK.
-7. Installer/uninstaller never deletes or modifies the owner's existing OpenRGB config or autostart entries without explicit consent.
+7. Installer/uninstaller never deletes or modifies the author's existing OpenRGB config or autostart entries without explicit consent.
 
 ---
 
@@ -276,7 +276,7 @@ Lights the first 3 LEDs green and the last 3 red (as in `Chase` mode of the test
 
 | # | Risk | Spike and decision |
 |---|---|---|
-| R1 | OpenRGB running in Session 0 (service) might fail for some devices (NvAPI I2C for the GPU needs a display adapter context; HID usually works; SMBus via PawnIO should work as SYSTEM). | Run the pinned OpenRGB as LocalSystem from the Service, check which devices are detected and controllable. If the GPU (or anything else) fails: **stop and ask the owner** between (a) GPU lit only after logon via a second OpenRGB in the user session handling only that device (with explicit non-duplication rules), (b) accept GPU static/hardware mode until logon. |
+| R1 | OpenRGB running in Session 0 (service) might fail for some devices (NvAPI I2C for the GPU needs a display adapter context; HID usually works; SMBus via PawnIO should work as SYSTEM). | Run the pinned OpenRGB as LocalSystem from the Service, check which devices are detected and controllable. If the GPU (or anything else) fails: **stop and ask the author** between (a) GPU lit only after logon via a second OpenRGB in the user session handling only that device (with explicit non-duplication rules), (b) accept GPU static/hardware mode until logon. |
 | R2 | OpenRGB 1.0rc2 SDK protocol vs OpenRGB.NET. | Compatibility spike; fallback own minimal client. |
 | R3 | Rescan request availability. | Check protocol; fallback restart the supervised process. |
 | R4 | Service receiving display on/off and lock events reliably, including on the logon screen. | Prototype with `RegisterServiceCtrlHandlerEx` + `GUID_CONSOLE_DISPLAY_STATE`; log events to a file during 10 cycles. |
@@ -286,11 +286,11 @@ Lights the first 3 LEDs green and the last 3 red (as in `Chase` mode of the test
 
 ---
 
-## 11. Build stages with test gates (the AI must stop at each gate)
+## 11. Build stages with test gates
 
-At the end of every stage the AI must: (1) summarize what was built, (2) give the owner **exact, copy-pasteable test steps** for the real hardware with the pass/fail criteria below, (3) **wait for the owner's OK** before the next stage. Unit tests, fakes (fake OpenRGB server, fake COM port) and automated checks run first and silently.
+Every stage ends with a gate: unit tests and fakes (fake OpenRGB server, fake COM port) run first, then the stage is tested by hand on the real hardware against the pass/fail criteria below before the next stage starts.
 
-**Stage 0: Foundation.** `git init`, solution layout, CLAUDE.md, build scripts, logging, config with migrations, IPC contracts, CPU measurement script updated for new process names. Spikes R2, R3. Gate: builds, unit tests green, owner reads the spike report.
+**Stage 0: Foundation.** `git init`, solution layout, build scripts, logging, config with migrations, IPC contracts, CPU measurement script updated for new process names. Spikes R2, R3. Gate: builds, unit tests green, author reads the spike report.
 
 **Stage 1: Service + OpenRGB supervisor + Adalight.** Windows Service, OpenRGB headless singleton with isolated config and no plugins, Adalight driver with discovery/reconnect/black-on-stop, simple static color for everything, installer-free dev scripts (`install-dev.ps1`). Spikes R1, R5, R6. Gate: after a **cold boot and restart** the keyboard and strip glow on the logon screen; kill OpenRGB and it comes back once; no second instance ever; measure time-to-first-light.
 
@@ -300,9 +300,9 @@ At the end of every stage the AI must: (1) summarize what was built, (2) give th
 
 **Stage 4: Agent, tray, hotkeys, ambilight.** Capture pipeline, strip layout (config-file first), Screen/Radial/Solid/Off, letterbox detection, SDR+HDR, hotkeys, tray flyout. Spike R7. Gate: black screen = strip fully off; dark scenes dark; no tail; smooth at 20/30; CPU of ambilight (Agent+Service+OpenRGB) **below 1%**; a game in borderless mode and an HDR case behave; hotkeys work after sleep.
 
-**Stage 5: UI.** WebView2 shell, front end, tiles with live preview, mapping wizard, strip layout wizard, profiles/themes, hotkey editor, settings, diagnostics. Gate: owner completes the mapping and strip wizards on real hardware, edits a palette, switches profiles; UI opened and closed repeatedly leaves no process behind and no CPU residue.
+**Stage 5: UI.** WebView2 shell, front end, tiles with live preview, mapping wizard, strip layout wizard, profiles/themes, hotkey editor, settings, diagnostics. Gate: author completes the mapping and strip wizards on real hardware, edits a palette, switches profiles; UI opened and closed repeatedly leaves no process behind and no CPU residue.
 
-**Stage 6: Installer and hardening.** Pinned OpenRGB bundled, PawnIO check, autostart conflict detection with consent, uninstall cleanup, crash recovery tests, docs (README: install, usage, troubleshooting, hardware settings; ARCHITECTURE.md). Gate: clean install and uninstall on the owner's PC; reboot; full checklist from stages 1-4 re-run once.
+**Stage 6: Installer and hardening.** Pinned OpenRGB bundled, PawnIO check, autostart conflict detection with consent, uninstall cleanup, crash recovery tests, docs (README: install, usage, troubleshooting, hardware settings; ARCHITECTURE.md). Gate: clean install and uninstall on the author's PC; reboot; full checklist from stages 1-4 re-run once.
 
 ---
 
@@ -311,7 +311,7 @@ At the end of every stage the AI must: (1) summarize what was built, (2) give th
 - Keyboard and strip light on the logon screen after every boot.
 - No duplicate OpenRGB instances and no flicker across 10 sleep cycles.
 - All six power/session rows in section 4 behave as specified, with configurable turn-off sets.
-- Rainbow profile reproduces the owner's current look (5.3) with synchronized motion; CPU below 1% total at 30 FPS; static profile approaches 0%.
+- Rainbow profile reproduces the author's current look (5.3) with synchronized motion; CPU below 1% total at 30 FPS; static profile approaches 0%.
 - Ambilight: black means off, smooth, letterbox aware, under 1% CPU, solid-color hotkey works.
 - UI: cyberpunk tiles with live previews, wizards, profiles, hotkeys, diagnostics; not resident.
 - Hardware is configurable through settings (COM port, LED count, layout, device mapping, FPS caps), not code.
@@ -319,20 +319,15 @@ At the end of every stage the AI must: (1) summarize what was built, (2) give th
 
 ---
 
-## 13. Git and GitHub workflow (owner requirement)
+## 13. Git workflow
 
-The AI builder creates and maintains the project on the owner's GitHub **automatically**, using the skill **`anthropic-skills:publikowanie-projektow-github`** (invoke it with the Skill tool; do not hand-roll `gh` commands for publishing).
-
-- Repository name: `RGBcontroller`. **Default visibility: private** (the repo contains machine and hardware details in `reference/`); the owner may switch it to public later. Do not make it public without asking.
-- Stage 0: `git init` in the project folder (it is not a repository yet), add `.gitignore` (.NET, Node, build outputs, installer outputs, logs, `*.csv` measurement output, local secrets), first commit, then use the skill to create the GitHub repository and README. The skill produces a verification report and waits for the owner's acceptance before pushing: keep that step, relay the report to the owner, and push only after the OK.
-- Commit often and in small logical units, **English** messages in Conventional Commits style (`feat:`, `fix:`, `docs:`, `test:`, `build:`, `chore:`), one concern per commit. Work on `main` for stage 0, then on short-lived branch per stage (`stage-1-service`, ...) merged to `main` after the owner passes the stage gate.
-- After every passed gate: tag (`v0.1.0-stage1`, ...), push, and refresh the README via the skill when the user-visible behaviour changed.
-- Never commit: secrets, tokens, the owner's personal files, build artifacts, installer binaries (attach them to releases instead if the owner wants).
-- Commit hardware evidence that is useful (`reference/*.ps1`, `reference/*.md`); the `.orp` OpenRGB profile may stay in the private repo but must be removed or ignored if the owner makes the repo public.
+- Commits are small and logical, with English messages in Conventional Commits style (`feat:`, `fix:`, `docs:`, `test:`, `build:`, `chore:`), one concern per commit.
+- One short-lived branch per stage (`stage-1-service`, ...), merged into `main` through a pull request after the stage gate passes, then tagged (`v0.1.0-stage1`, ...).
+- Never committed: secrets, personal files, build artifacts, installer binaries, local hardware evidence.
 
 ---
 
-## 14. Open items (owner will fill in later or via wizards)
+## 14. Open items (author will fill in later or via wizards)
 
 - Strip layout (wizard).
 - Which addressable header holds the pump and which hold fans, LED counts per component (wizard).

@@ -2,7 +2,7 @@
 
 Dates: 2026-10-30/31.
 
-Setup: `install-dev.ps1` on the owner's PC. The Service runs as LocalSystem and starts the pinned OpenRGB 1.0rc2
+Setup: `install-dev.ps1` on the author's PC. The Service runs as LocalSystem and starts the pinned OpenRGB 1.0rc2
 in Session 0. The old `OpenRGB_Admin` task is disabled. Fast Startup is **off** on this PC (`HiberbootEnabled = 0`),
 so "Shut down" is a cold boot.
 
@@ -11,7 +11,7 @@ boot; OpenRGB came back once after being killed; there was never a second instan
 
 ## R1: OpenRGB in Session 0 as LocalSystem
 
-**Detection: all 5 devices**, the same set as the owner's own OpenRGB:
+**Detection: all 5 devices**, the same set as the author's own OpenRGB:
 
 | Device | Bus | LEDs |
 |---|---|---|
@@ -21,7 +21,7 @@ boot; OpenRGB came back once after being killed; there was never a second instan
 | Razer Ornata Chroma V2 | USB HID | 132 |
 | Logitech G502 HERO | USB HID (receiver) | 2 |
 
-**Control: all 5 confirmed visually by the owner, GPU included.** Decision R1 stands; no second OpenRGB is needed
+**Control: all 5 confirmed visually by the author, GPU included.** Decision R1 stands; no second OpenRGB is needed
 for the GPU.
 
 **Lesson (bug found at the cold-boot gate):** `SETCUSTOMMODE` (1100) only sets `active_mode` inside OpenRGB.
@@ -50,7 +50,7 @@ At boot, OpenRGB detection takes about 4 s (1.6 s on a running system). Everythi
 screen appears.
 
 **Black screen at boot: not caused by RGBcontroller.**
-- The owner saw a few seconds of black screen before the logon screen.
+- The author saw a few seconds of black screen before the logon screen.
 - An A/B restart with the Service set to Manual (so neither the Service nor OpenRGB ran) showed **the same black
   screen**.
 - No driver or Windows update was installed in that period.

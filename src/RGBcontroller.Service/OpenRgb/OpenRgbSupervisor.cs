@@ -58,6 +58,7 @@ internal sealed class OpenRgbSupervisor
     private readonly SupervisorTimings _timings;
     private readonly ILogger _log;
     private readonly SemaphoreSlim _deviceListChanged = new(0, 1);
+    private volatile IReadOnlyList<ZoneSizeConfig> _zoneSizes;
     private readonly SemaphoreSlim _resumed = new(0, 1);
     private readonly SemaphoreSlim _usbArrived = new(0, 1);
     private readonly HashSet<string> _litDevices = [];
@@ -70,6 +71,7 @@ internal sealed class OpenRgbSupervisor
     {
         _launcher = launcher;
         _config = config;
+        _zoneSizes = config.ZoneSizes;
         _sink = sink;
         _clock = clock;
         _log = log.ForContext<OpenRgbSupervisor>();
@@ -95,8 +97,22 @@ internal sealed class OpenRgbSupervisor
     /// <summary>Number of OpenRGB launches so far (1 = no restart).</summary>
     public int Starts => Volatile.Read(ref _starts);
 
+    private volatile IOpenRgbProcess? _current;
+    private volatile bool _manualRestart;
+    private volatile bool _rescanNow;
+
     /// <summary>Raised after each successful (re)apply with the device count.</summary>
     public event Action<int>? DevicesApplied;
+
+    /// <summary>
+    /// New LED counts for resizable zones (mapping wizard): the supervisor loop re-applies the lighting, which resizes
+    /// the zones that differ, so no Service restart is needed.
+    /// </summary>
+    public void UpdateZoneSizes(IReadOnlyList<ZoneSizeConfig> sizes)
+    {
+        _zoneSizes = sizes;
+        SignalDeviceListChanged();
+    }
 
     /// <summary>
     /// The PC woke from sleep or hibernation. Devices come back in their power-on state (RAM rainbow, GPU dark) and
@@ -131,6 +147,35 @@ internal sealed class OpenRgbSupervisor
         {
             // Already pending.
         }
+    }
+
+    /// <summary>Diagnostics: rescans the devices now, without the hot-plug settle delay of the USB path.</summary>
+    public void RequestRescan() => NotifyResumedNow();
+
+    /// <summary>Diagnostics: stops OpenRGB and starts it again at once, without a failure backoff.</summary>
+    public void RequestRestart()
+    {
+        var process = _current;
+        if (process is null)
+        {
+            return;
+        }
+
+        _manualRestart = true;
+        try
+        {
+            process.Kill();
+        }
+        catch (InvalidOperationException)
+        {
+            // It has just exited; the supervisor restarts it anyway.
+        }
+    }
+
+    private void NotifyResumedNow()
+    {
+        _rescanNow = true;
+        NotifyResumed();
     }
 
     /// <summary>Runs until <paramref name="stopToken"/> is cancelled, then sends black to all devices and stops OpenRGB.</summary>
@@ -179,13 +224,29 @@ internal sealed class OpenRgbSupervisor
 
             using (process)
             {
-                await RunSessionAsync(process, stopToken).ConfigureAwait(false);
-                process.Kill();
+                _current = process;
+                try
+                {
+                    await RunSessionAsync(process, stopToken).ConfigureAwait(false);
+                    process.Kill();
+                }
+                finally
+                {
+                    _current = null;
+                }
             }
 
             if (stopToken.IsCancellationRequested)
             {
                 break;
+            }
+
+            if (_manualRestart)
+            {
+                _manualRestart = false;
+                failures = 0;
+                _log.Information("Restarting OpenRGB as requested");
+                continue;
             }
 
             failures = _clock.Elapsed - startedAt >= _timings.StableUptime ? 1 : failures + 1;
@@ -216,7 +277,7 @@ internal sealed class OpenRgbSupervisor
             client.Disconnected += cause => disconnected.TrySetResult(cause);
             client.DeviceListUpdated += SignalDeviceListChanged;
 
-            lighting = new DeviceLighting(client, _config, _sink, _clock, _litDevices, _log);
+            lighting = new DeviceLighting(client, _config, _sink, _clock, _litDevices, _log) { ZoneSizes = _zoneSizes };
             await lighting.ApplyAllAsync(stopToken).ConfigureAwait(false);
             State = ComponentState.Ok;
             DevicesApplied?.Invoke(lighting.Devices.Count);
@@ -235,7 +296,15 @@ internal sealed class OpenRgbSupervisor
 
                 if (first == process.Exited)
                 {
-                    _log.Error("OpenRGB pid {Pid} exited unexpectedly", process.Id);
+                    if (_manualRestart)
+                    {
+                        _log.Information("OpenRGB pid {Pid} stopped for a restart", process.Id);
+                    }
+                    else
+                    {
+                        _log.Error("OpenRGB pid {Pid} exited unexpectedly", process.Id);
+                    }
+
                     return;
                 }
 
@@ -275,8 +344,11 @@ internal sealed class OpenRgbSupervisor
                 if (first == resumed)
                 {
                     resumed = null;
-                    var settle = TimeSpan.FromMilliseconds(_config.ResumeRescanDelayMilliseconds);
-                    _log.Information("Resumed from sleep; rescanning devices in {Delay} ms", (long)settle.TotalMilliseconds);
+                    var requested = _rescanNow;
+                    _rescanNow = false;
+                    var settle = requested ? TimeSpan.Zero : TimeSpan.FromMilliseconds(_config.ResumeRescanDelayMilliseconds);
+                    _log.Information(requested ? "Rescanning devices as requested" : "Resumed from sleep; rescanning devices in {Delay} ms",
+                        (long)settle.TotalMilliseconds);
                     await RescanAsync(client, lighting, changed, settle, stopToken).ConfigureAwait(false);
 
                     // The pending wait above took this rescan's first notice; it is handled now.

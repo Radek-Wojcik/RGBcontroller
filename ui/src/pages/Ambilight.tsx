@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { bridge } from "../bridge";
 import { findProfile } from "../config";
 import { useStore } from "../store";
@@ -5,6 +6,7 @@ import { nearestSlot } from "../strip";
 import { StripView, useStripColors } from "../StripView";
 import type { ScreenCaptureConfig, StripCorner, StripLayoutConfig } from "../types";
 import { Empty, NumberField, Panel, Segmented, Select, Toggle } from "../ui";
+import { StripWizard } from "./StripWizard";
 
 const CORNERS: StripCorner[] = ["TopLeft", "TopRight", "BottomRight", "BottomLeft"];
 const CORNER_LABELS: Record<StripCorner, string> = { TopLeft: "Top left", TopRight: "Top right", BottomRight: "Bottom right", BottomLeft: "Bottom left" };
@@ -13,6 +15,7 @@ const CORNER_LABELS: Record<StripCorner, string> = { TopLeft: "Top left", TopRig
 export function Ambilight() {
   const { state, snapshot, editConfig, run } = useStore();
   const live = useStripColors();
+  const [wizard, setWizard] = useState(false);
   if (!state || !snapshot) return <Empty>Waiting for the Service...</Empty>;
   const config = snapshot.config;
   const layout = config.strip.layout;
@@ -25,7 +28,7 @@ export function Ambilight() {
 
   return (
     <div className="tiles">
-      <Panel wide tall title="Strip layout" meta={<span className="num">{config.strip.ledCount} LED · {placed} on the edges</span>}>
+      {wizard ? <StripWizard onClose={() => setWizard(false)} /> : <Panel wide tall title="Strip layout" meta={<span className="num">{config.strip.ledCount} LED · {placed} on the edges</span>}>
         <div className="ambilight">
           <StripView layout={layout} ledCount={config.strip.ledCount} mode={state.allOff ? "Off" : a?.mode ?? "Off"}
             solidColor={a?.solidColor ?? "#FFFFFF"} brightness={state.stripBrightnessPercent} speed={a?.speed ?? 0.1} live={live}
@@ -73,12 +76,13 @@ export function Ambilight() {
               monitor stand.
             </p>
             <div className="row buttons">
+              <button className="primary" onClick={() => setWizard(true)}>Start the layout wizard</button>
               <button onClick={() => run(() => bridge.call("showStripTest", { seconds: 60 }))}>Show test pattern (60 s)</button>
               <button onClick={() => run(() => bridge.call("showStripTest", { seconds: 0 }))}>End test</button>
             </div>
           </div>
         </div>
-      </Panel>
+      </Panel>}
 
       <Panel title="Response" meta="SPEC 6.2">
         <div className="row">

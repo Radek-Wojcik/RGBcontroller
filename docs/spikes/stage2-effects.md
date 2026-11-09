@@ -1,6 +1,6 @@
 # Stage 2: effect engine, CPU and resume
 
-Dates: 2026-10-31 to 2026-11-01. Build installed with `install-dev.ps1` on the owner's PC.
+Dates: 2026-10-31 to 2026-11-01. Build installed with `install-dev.ps1` on the author's PC.
 CPU measured with `tools\Measure-RGBcontroller.ps1` (idle PC; percent of the whole 32-thread CPU).
 
 ## CPU
@@ -30,14 +30,14 @@ write SMBus ourselves, SPEC 9.2).
 - 5 FPS with speed 0.3: "RAM lags a lot" (about 22 degrees of hue per frame).
 - 10 FPS with speed 0.3: "still lags slightly" (about 11 degrees per frame). In addition, OpenRGB needs about
   48 ms to write one RAM frame, so the LEDs change one after another, not at once.
-- Current tuning on the owner's PC: **10 FPS, speed 0.08, scale 0.3** (slower and a longer wave, about
-  3 degrees per frame). Total CPU about 1.7%: above the 1% target, below the old 2.58%. The owner chose the
+- Current tuning on the author's PC: **10 FPS, speed 0.08, scale 0.3** (slower and a longer wave, about
+  3 degrees per frame). Total CPU about 1.7%: above the 1% target, below the old 2.58%. The author chose the
   mirror effect over hardware mode; the tuning stays adjustable (`--group RAM ...`, later the UI tiles).
 - Code default for new configs: RAM group 5 FPS.
 
 ## Sleep and resume (pulled forward from stage 3)
 
-Owner's bug: after sleep the RAM blinked (its power-on rainbow fought our frames) and the GPU stayed dark; with
+Author's bug: after sleep the RAM blinked (its power-on rainbow fought our frames) and the GPU stayed dark; with
 the stage 1 build the keyboard and GPU were dark and the board and mouse showed their factory rainbow. Cause:
 nothing reacted to resume, and the hardware comes back in its power-on state.
 
@@ -52,7 +52,7 @@ Live result, sleep at 15:39:01:
 - resume came at 15:39:16 (ResumeAutomatic);
 - all 5 devices were back at 15:39:23, 6.6 s after resume;
 - one OpenRGB the whole time;
-- the owner confirmed visually.
+- the author confirmed visually.
 
 During the rescan the settle logic applied 0 and then 2 devices before all 5 (known item O4). It is harmless, but
 the USB devices light about 2.5 s after the RAM and GPU.

@@ -182,6 +182,8 @@ public sealed class IpcContractTests
 
         public Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
 
+        public Task<CommandResult> ShowStripMarkerAsync(StripMarkerRequest request, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
         public Task<ConfigSnapshot> GetConfigAsync(CancellationToken cancellationToken) => Task.FromResult(new ConfigSnapshot(7, FullConfig));
 
         public Task<ConfigUpdateResult> UpdateConfigAsync(ConfigUpdateRequest request, CancellationToken cancellationToken) =>
@@ -190,6 +192,15 @@ public sealed class IpcContractTests
         public Task<StripColors> GetStripColorsAsync(CancellationToken cancellationToken) => Task.FromResult(new StripColors([1, 2, 3]));
 
         public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public Task<LogTail> GetLogTailAsync(LogTailRequest request, CancellationToken cancellationToken) => Task.FromResult(new LogTail(string.Empty, []));
+
+        public Task<CommandResult> RestartOpenRgbAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public Task<CommandResult> RescanDevicesAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public Task<CommandResult> IdentifyAsync(IdentifyRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new CommandResult(true, request.ToString()));
 
         public Task<IReadOnlyList<DeviceColors>> GetDeviceColorsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DeviceColors>>([new DeviceColors(3, [1, 2, 3])]);

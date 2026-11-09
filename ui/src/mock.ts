@@ -25,7 +25,7 @@ export function createMockHost(): Host {
           ...[1, 2, 3].map(i => ({ name: `Aura Addressable ${i}`, type: 1, ledCount: 20, resizable: true, matrixWidth: 0, matrixHeight: 0 })),
         ],
       },
-      { index: 3, name: "Razer Ornata Chroma V2", type: 5, zones: [{ name: "Keyboard", type: 2, ledCount: 132, resizable: false, matrixWidth: 22, matrixHeight: 6 }] },
+      { index: 3, name: "Razer Ornata Chroma V2", type: 5, zones: [{ name: "Keyboard", type: 2, ledCount: 132, resizable: false, matrixWidth: 22, matrixHeight: 6, matrix: Array.from({ length: 132 }, (_, i) => i) }] },
       { index: 4, name: "G502 HERO Gaming Mouse", type: 6, zones: [{ name: "Primary Zone", type: 0, ledCount: 1, resizable: false, matrixWidth: 0, matrixHeight: 0 }, { name: "Logo Zone", type: 0, ledCount: 1, resizable: false, matrixWidth: 0, matrixHeight: 0 }] },
     ],
   };
@@ -89,6 +89,19 @@ export function createMockHost(): Host {
     },
     setAllOff: p => ((allOff = p.off), emit({ event: "state", data: state() }), ok),
     showStripTest: () => ok,
+    showStripMarker: () => ok,
+    getLogTail: p => ({
+      file: `${p.component}-20261109.log`,
+      lines: [
+        "2026-11-09 18:05:13.600 +01:00 [INF] Started OpenRGB pid 36440",
+        "2026-11-09 18:05:14.674 +01:00 [INF] Strip Connected COM7",
+        "2026-11-09 18:05:15.140 +01:00 [INF] Connected to OpenRGB SDK (protocol 5, server 5)",
+        "2026-11-09 18:05:20.156 +01:00 [WRN] Example warning line",
+      ],
+    }),
+    restartOpenRgb: () => ok,
+    rescanDevices: () => ok,
+    identify: () => ok,
     getAgentSettings: () => ({}),
     getConfig: () => ({ revision, config }),
     updateConfig: p => {

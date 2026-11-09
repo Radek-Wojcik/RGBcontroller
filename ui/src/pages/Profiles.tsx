@@ -3,6 +3,8 @@ import { paletteCss, updateProfile } from "../config";
 import { useStore, useThrottled } from "../store";
 import type { AmbilightConfig, AmbilightMode } from "../types";
 import { Empty, Panel, Segmented, Select, Slider } from "../ui";
+import { PaletteEditor } from "./PaletteEditor";
+import { ImportProfile, ProfileTools } from "./ProfileTools";
 
 const MODES = ["Screen", "Radial", "Solid", "Off"] as const;
 
@@ -66,9 +68,15 @@ export function Profiles() {
               <button disabled={lighting.lockProfile === p.name}
                 onClick={() => editConfig(c => ({ ...c, lighting: { ...c.lighting, lockProfile: p.name } }))}>Use when locked</button>
             </div>
+            <ProfileTools name={p.name} />
           </Panel>
         );
       })}
+      <Panel title="Import" meta="profile file">
+        <p className="dim">Add a profile exported from another RGBcontroller. A name already in use gets a number; palettes it needs are added.</p>
+        <ImportProfile />
+      </Panel>
+      <PaletteEditor />
       <Panel title="Lock screen" meta="SPEC 4">
         <p className="dim">
           While the session is locked the strip cannot mirror the screen; it shows the profile's fallback mode.

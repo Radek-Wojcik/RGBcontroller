@@ -123,6 +123,29 @@ public sealed class ControlServerTests
     }
 
     [Fact]
+    public async Task Endpoint_ValidatesIdentifyRequests()
+    {
+        var host = new FakeHost();
+        var endpoint = new ServiceControlEndpoint(host);
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(-1, "Aura Addressable 1", 0, 5, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, "Aura Addressable 1", -1, 5, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, "Aura Addressable 1", 0, 0, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, "Aura Addressable 1", 0, 100_000, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, new string('z', 500), 0, 5, 10), ct)).Success);
+        Assert.False((await endpoint.IdentifyAsync(new IdentifyRequest(2, null, 0, 5, 301), ct)).Success);
+        Assert.Null(host.LastIdentify);
+
+        Assert.True((await endpoint.IdentifyAsync(new IdentifyRequest(2, "Aura Addressable 1", 0, 5, 30), ct)).Success);
+        Assert.Equal((new IdentifyRequest(2, "Aura Addressable 1", 0, 5, 30), TimeSpan.FromSeconds(30)), host.LastIdentify);
+
+        // Zero seconds ends an identification whatever else the request holds.
+        Assert.True((await endpoint.IdentifyAsync(new IdentifyRequest(0, null, 0, 1, 0), ct)).Success);
+        Assert.Equal(TimeSpan.Zero, host.LastIdentify!.Value.Duration);
+    }
+
+    [Fact]
     public async Task Endpoint_RejectsIncompleteConfigs()
     {
         var host = new FakeHost();
@@ -157,6 +180,7 @@ public sealed class ControlServerTests
         Assert.False(LightingHost.NeedsRestart(current, current with { Capture = new ScreenCaptureConfig { Gamma = 2.2 } }));
         Assert.True(LightingHost.NeedsRestart(current, current with { Strip = current.Strip with { LedCount = 133 } }));
         Assert.True(LightingHost.NeedsRestart(current, current with { OpenRgb = current.OpenRgb with { Port = 7000 } }));
+        Assert.False(LightingHost.NeedsRestart(current, current with { OpenRgb = current.OpenRgb with { ZoneSizes = [new("D", "Z", 12)] } }));
     }
 
     private sealed class EventSink : IServiceEvents
@@ -205,9 +229,27 @@ public sealed class ControlServerTests
 
         public string? ReopenStrip() => null;
 
+        public LogTail GetLogTail(string component, int lines) => new("x.log", []);
+
+        public string? RestartOpenRgb() => null;
+
+        public string? RescanDevices() => null;
+
+        public (IdentifyRequest Request, TimeSpan Duration)? LastIdentify { get; private set; }
+
+        public string? Identify(IdentifyRequest request, TimeSpan duration)
+        {
+            LastIdentify = (request, duration);
+            return null;
+        }
+
         public IReadOnlyList<DeviceColors> GetDeviceColors() => [];
 
         public void ShowStripTest(TimeSpan duration)
+        {
+        }
+
+        public void ShowStripMarker(int start, int count, TimeSpan duration)
         {
         }
 

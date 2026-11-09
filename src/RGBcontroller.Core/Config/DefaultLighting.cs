@@ -17,7 +17,7 @@ public static class DefaultLighting
     public const string Mouse = "G502 HERO Gaming Mouse";
 
     public const string PumpAndFansGroup = "Pump + Fans";
-    public const string BoardGroup = "Board";
+    public const string MotherboardGroup = "Motherboard";
     public const string RamGroup = "RAM";
     public const string KeyboardGroup = "Keyboard";
     public const string MouseGroup = "Mouse";
@@ -47,7 +47,7 @@ public static class DefaultLighting
             Name = PumpAndFansGroup,
             Members = [new(Motherboard, "Aura Addressable 1"), new(Motherboard, "Aura Addressable 2"), new(Motherboard, "Aura Addressable 3")],
         },
-        new() { Name = BoardGroup, Members = [new(Motherboard, "Aura Mainboard")] },
+        new() { Name = MotherboardGroup, Members = [new(Motherboard, "Aura Mainboard")] },
         new() { Name = RamGroup, Members = [new(Ram)], MaxFps = 5 },
         new() { Name = KeyboardGroup, Members = [new(Keyboard)] },
         new() { Name = MouseGroup, Members = [new(Mouse)], MaxFps = 15 },
@@ -87,7 +87,7 @@ public static class DefaultLighting
         Groups =
         [
             new() { Group = PumpAndFansGroup, Effect = EffectKind.Radial, Palette = palette, Speed = 0.25 * speedFactor },
-            new() { Group = BoardGroup, Effect = EffectKind.ColorCycle, Palette = palette, Speed = 0.1 * speedFactor },
+            new() { Group = MotherboardGroup, Effect = EffectKind.ColorCycle, Palette = palette, Speed = 0.1 * speedFactor },
             new() { Group = RamGroup, Effect = EffectKind.Mirror, Palette = palette, Speed = 0.3 * speedFactor, Angle = 90, Scale = 0.5 },
             new() { Group = KeyboardGroup, Effect = EffectKind.Wave, Palette = palette, Speed = 0.25 * speedFactor, Angle = 180 },
             new() { Group = MouseGroup, Effect = EffectKind.ColorCycle, Palette = palette, Speed = 0.1 * speedFactor },
@@ -101,7 +101,7 @@ public static class DefaultLighting
         Groups =
         [
             new() { Group = PumpAndFansGroup, Effect = EffectKind.Aurora, Palette = "Aurora", Speed = 0.05 },
-            new() { Group = BoardGroup, Effect = EffectKind.Aurora, Palette = "Aurora", Speed = 0.05 },
+            new() { Group = MotherboardGroup, Effect = EffectKind.Aurora, Palette = "Aurora", Speed = 0.05 },
             new() { Group = RamGroup, Effect = EffectKind.Aurora, Palette = "Aurora", Speed = 0.05, Angle = 90 },
             new() { Group = KeyboardGroup, Effect = EffectKind.Aurora, Palette = "Aurora", Speed = 0.05, Angle = 180 },
             new() { Group = MouseGroup, Effect = EffectKind.Aurora, Palette = "Aurora", Speed = 0.05 },
@@ -116,7 +116,7 @@ public static class DefaultLighting
         Groups =
         [
             new() { Group = PumpAndFansGroup, Effect = EffectKind.Static, Palette = "#FF5A14", BrightnessPercent = 20 },
-            new() { Group = BoardGroup, Effect = EffectKind.Off },
+            new() { Group = MotherboardGroup, Effect = EffectKind.Off },
             new() { Group = RamGroup, Effect = EffectKind.Static, Palette = "#FF5A14", BrightnessPercent = 15 },
             new() { Group = KeyboardGroup, Effect = EffectKind.Static, Palette = "#FF7A1A", BrightnessPercent = 25 },
             new() { Group = MouseGroup, Effect = EffectKind.Off },
@@ -134,7 +134,7 @@ public static class DefaultLighting
         Groups =
         [
             new() { Group = PumpAndFansGroup, Effect = EffectKind.Static, Palette = "#FFFFFF" },
-            new() { Group = BoardGroup, Effect = EffectKind.Static, Palette = "#FFFFFF" },
+            new() { Group = MotherboardGroup, Effect = EffectKind.Static, Palette = "#FFFFFF" },
             new() { Group = RamGroup, Effect = EffectKind.Static, Palette = "#FFFFFF" },
             new() { Group = KeyboardGroup, Effect = EffectKind.Static, Palette = "#FFFFFF" },
             new() { Group = MouseGroup, Effect = EffectKind.Static, Palette = "#FFFFFF" },
