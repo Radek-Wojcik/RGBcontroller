@@ -1,6 +1,6 @@
 # RGBcontroller: project state and handoff
 
-Last updated: 2026-11-08. Stage 4 passed (version 0.4.0 installed); stage 5 in progress on branch `stage-5-ui`. **Read this file right after
+Last updated: 2026-11-09. Stage 4 passed; stage 5 in progress on branch `stage-5-ui` (Service with IPC 1.8 installed). **Read this file right after
 `SPEC.md` and `CLAUDE.md` when you start a new session.** It records everything that was built, decided and learned
 in stages 0-4, the exact state of
 the owner's PC, and what to do next. `SPEC.md` stays the source of truth for requirements. This file is the source
@@ -8,28 +8,48 @@ of truth for **what exists now**.
 
 ---
 
-## 0. Handoff, 2026-11-08 (read this first)
+## 0. Handoff, 2026-11-09 (read this first)
 
 **Where the project stands**
 - Stages 0 to 4 passed. Stage 4 gate: 1, 2, 3 (smoothness), 4 (CPU), 5, 7, 8, 9 passed; 6 (HDR) skipped by the owner.
   Ambilight CPU measured on 2026-11-05 with `tools\Measure-RGBcontroller.ps1` for 60 s on a colorful fullscreen
   film: Agent 0.022%, Service 0.012%, UI (open) 0.026%, OpenRGB 1.7% (RAM at 10 FPS, as before).
 - Stage 5 is in progress (see the table in section 1 and `docs/spikes/stage5-ui-plan.md`).
-- The repository is **public** (MIT). `main` has PR #3 to #6 merged. Five commits are on `stage-5-ui` only:
+- The repository is **public** (MIT). `main` has PR #3 to #6 merged. Seven commits are on `stage-5-ui` only:
   `c63747f` (letterbox thin-line fix), `ccfa0f2` (version 0.4.0 and the stage 4 gate report), `f75deff` (IPC 1.7),
-  `c312f5f` (device previews), `561169e` (docs). They are pushed; a PR into `main` still needs the owner's OK.
-- The owner's PC runs 0.4.0 from `install-dev.ps1`. The strip (LED BOX on COM7, 133 LEDs) and all 5 OpenRGB devices
-  are lit. The UI window was opened and connected to the Service (IPC 1.7).
+  `c312f5f` (device previews), `561169e` and `a89c519` (docs), `eb0970a` (IPC 1.8 Identify), `bb960f5` (mapping
+  wizard). The last two are **local, not pushed**. A PR into `main` still needs the owner's explicit OK; the tag
+  `v0.4.0-stage4` goes on the merge commit.
+- The owner's PC runs the build from `bb960f5`, installed on 2026-11-09 with `install-dev.ps1` (`--status` reports
+  `0.4.0 (IPC 1.8)`; the assembly version was not bumped). The strip (LED BOX on COM7, 133 LEDs) and all 5 OpenRGB
+  devices light up after the install. Tests: 230 .NET and 20 front end, all green.
 
-**Update, 2026-11-08 (later): stage 5 continues on `stage-5-ui`**
-- The owner reported that after several days of testing everything works very well, so work went on with the stage 5
-  list in the owner's order. Done: IPC 1.8 `Identify` and the **mapping wizard** (commit `eb0970a` and the UI commit
-  after it; details in `docs/spikes/stage5-ui-plan.md`). 230 .NET + 20 front end tests are green.
-- **Not installed yet:** the owner's PC still runs 0.4.0 (IPC 1.7). The wizard needs the new Service
-  (`install-dev.ps1`, elevated, the owner clicks UAC) before it can be tried on the hardware.
-- The PR `stage-5-ui` into `main` and the tag `v0.4.0-stage4` are still waiting for the owner's explicit OK.
-- Still to do in stage 5: strip layout wizard, palette editor, profile create/duplicate/rename/delete/import/export,
-  diagnostics page (log tail, restart OpenRGB, rescan), tile drag and resize.
+**Done since the last handoff (2026-11-08): the mapping wizard**
+- IPC 1.8 `IdentifyAsync(IdentifyRequest(deviceIndex, zone, start, count, seconds))`. The engine shows one LED range
+  of one OpenRGB device (dim white at 60%, first LEDs green, last LEDs red, a third of the range and at most 3
+  each) and turns the other OpenRGB devices black; the strip keeps its profile. Static, so the render loop idles.
+  `LightingHost` ends it by timer (1-300 s) or with `seconds` 0; blackout and all-off override it; an invalid
+  device, zone or range is refused. Code: `LightingEngine.SetIdentify`, `Core/Lighting/IdentifyTarget.cs`,
+  `ServiceControlEndpoint.IdentifyAsync` (validation), `Bridge` method `identify`.
+- Front end: Devices page, "Start the wizard" (`ui/src/pages/MappingWizard.tsx`; edit logic and tests in
+  `mapping.ts` / `mapping.test.ts`). Per zone (single LEDs and lines; matrix zones keep the device's shape):
+  components with shape (Ring, Line, Point), LED count (the last one is "the rest"), direction, ring top LED, vertical
+  lines; add, remove, undo, save into `lighting.layouts`. A header's LED count goes into `openRgb.zoneSizes` and
+  applies at the next OpenRGB detection (the Service reports `RestartRequired`). Leaving the wizard ends the
+  identification. `types.ts` now types `layouts` and `openRgb`.
+- Checked in the browser on stand-in data (opens, splits, saves, no console errors). **Not yet tried on the hardware.**
+
+**Owner test now open (mapping wizard on the real hardware)**
+1. Open RGBcontroller from the desktop shortcut, page Devices, "Start the wizard" (starts on `Aura Addressable 1`).
+2. Everything but the zone goes dark; the zone is white with green start and red end LEDs, also drawn live in the window.
+3. For each of the three headers: split into components (Add a component), check each with "Show N", set ring
+   direction (Counterclockwise) and "LED on top" (Show top), Save mapping. Close the wizard: Rainbow returns.
+4. Report what differs from the hardware. Known: a new header LED count applies only after the next OpenRGB detection
+   (sleep or Service restart); a rescan button comes with the diagnostics page.
+
+**Still to do in stage 5, in the owner's order:** strip layout wizard (O14), palette editor, profile
+create/duplicate/rename/delete/import/export, diagnostics page (log tail, restart OpenRGB, rescan; needs new IPC
+methods, the Service has no rescan or restart call yet), tile drag and resize. Then the stage 5 gate.
 
 **Open hardware problem (highest priority)**
 - The LED box sometimes stops taking frames. It still enumerates on USB and the Service writes to COM7, but the
@@ -48,14 +68,15 @@ of truth for **what exists now**.
   frames. Workaround for the owner: a browser with hardware acceleration turned off.
 - Ambilight bars: a dark image edge can still look dim next to a bright side. The bars are detected per frame with
   hysteresis (1.5 s), so a quick change of content is followed with a short delay.
-- The default device groups are the author's hardware. Another PC needs its `config.json` edited until the mapping
-  wizard exists.
+- The default device groups are the author's hardware. Another PC needs its group membership edited in `config.json`
+  (the mapping wizard edits shapes and LED counts, not groups).
 - The OpenRGB executable is pinned from the owner's `C:\Program Files\OpenRGB` (a stage 6 item).
 
 **Next steps, in order**
-1. Owner: test sleep and shutdown again with the 0.4.0 build (the strip must go dark). Report any freeze with the time.
+1. Owner: try the mapping wizard (above). The owner reported on 2026-11-08 that several days of testing went very well,
+   so sleep and shutdown with 0.4.0 count as checked; report any freeze with the time.
 2. With the owner's OK: open a PR `stage-5-ui` into `main`, merge it, and tag `v0.4.0-stage4` on the merge commit.
-3. Stage 5, in the order the owner asked for: the mapping wizard (identify each ARGB channel), the strip layout
+3. Stage 5, in the order the owner asked for: the mapping wizard (done, to be tried), the strip layout
    wizard in the UI, the palette editor, profile create/duplicate/rename/delete/import/export, the diagnostics page
    (log tail, restart OpenRGB, rescan), tile drag and resize.
 4. Stage 5 gate: the owner completes both wizards on the real hardware, edits a palette, switches profiles, and opens
@@ -85,13 +106,13 @@ Elevated installs run with `install-dev.ps1` (the owner clicks UAC). Front end d
 | 2. Effect engine (+ sleep/resume pulled forward from stage 3) | **Passed** (2026-11-01) | `v0.2.0-stage2` | `docs/spikes/stage2-effects.md` |
 | 3. Power, session, display | **Passed** (2026-11-01; owner waived the remaining 7 sleep and 3 hibernate cycles) | `v0.3.0-stage3` | `docs/spikes/stage3-power.md` |
 | 4. Agent, tray, hotkeys, ambilight | **Passed** (2026-11-05; HDR skipped by the owner; ambilight CPU about 0.03%). Version 0.4.0; tag `v0.4.0-stage4` after the merge into `main` | | `docs/spikes/stage4-agent.md` |
-| 5. UI | **In progress**: WebView2 shell, React front end (six pages), live previews of the strip and every device, IPC 1.7. Mapping wizard done (IPC 1.8, not installed yet). Missing: strip wizard, palette editor, profile create/duplicate/rename/delete/import/export, diagnostics page | | `docs/spikes/stage5-ui-plan.md` |
+| 5. UI | **In progress**: WebView2 shell, React front end (six pages), live previews of the strip and every device, IPC 1.8. Mapping wizard built and installed, awaiting the owner's hardware test. Missing: strip wizard, palette editor, profile create/duplicate/rename/delete/import/export, diagnostics page | | `docs/spikes/stage5-ui-plan.md` |
 | 6 | Not started | | |
 
 What works today on the owner's PC:
-- The installed build is version **0.4.0** (`--status` reports 0.4.0, IPC 1.7) from branch `stage-5-ui` at commit
-  561169e. It contains the stage 4 fixes, the UI, the USB hot-plug rescan, the ambilight thin-line fix and the device
-  previews. Section 0 lists the details.
+- The installed build is version **0.4.0** (`--status` reports 0.4.0, IPC 1.8) from branch `stage-5-ui` at commit
+  bb960f5. It contains the stage 4 fixes, the UI, the USB hot-plug rescan, the ambilight thin-line fix, the device
+  previews and the mapping wizard. Section 0 lists the details.
 - **Stage 4:** the Agent runs in the tray (started at logon from HKCU Run), mirrors the screen to the strip (Screen
   mode) while the session is unlocked and the display is on, and has hotkeys Ctrl+F9 (solid toggle), Ctrl+F10 (cycle
   strip mode), Ctrl+F11/F12 (strip brightness -/+). The strip is now **133 LEDs on COM7** in the owner's layout
@@ -535,15 +556,15 @@ See section 0 (2026-11-08) for the current list. Stage 4 is closed; the remainin
 You are continuing RGBcontroller (Windows RGB + Adalight controller) for the owner Radek. Talk to the owner in
 Polish; code, comments, commits and docs are in English.
 
-Read, in this order: SPEC.md, CLAUDE.md, docs/HANDOFF.md, then docs/spikes/*.md. HANDOFF.md describes exactly what
-exists, the owner's PC state, binding preferences (commits authored only by the owner with the noreply address, no
-Co-Authored-By/Claude attribution anywhere), decisions and open items. Stages 0-3 have passed (tags v0.0.1-stage0,
-v0.1.0-stage1, v0.2.0-stage2, v0.3.0-stage3). Stage 4 (Agent, tray, hotkeys, ambilight) is built on branch
-stage-4-agent and installed on this PC; its gate tests are still open.
+Read, in this order: SPEC.md, CLAUDE.md, docs/HANDOFF.md (section 0 first), docs/spikes/stage5-ui-plan.md, then the
+other docs/spikes/*.md as needed. HANDOFF.md describes exactly what exists, the owner's PC state, binding preferences
+(commits authored only by the owner with the noreply address, no Co-Authored-By/Claude attribution anywhere),
+decisions and open items. Stages 0-4 have passed. Stage 5 (UI) is in progress on branch stage-5-ui; the mapping
+wizard is installed and waits for the owner's hardware test.
 
-First: `git checkout stage-4-agent && git pull`, run `.\build.ps1 -Test` (expect 198 green tests), and run
-`& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status`. Then report in Polish in a few lines and
-continue with HANDOFF.md section 7 (stage 4 gate).
+First: `git checkout stage-5-ui`, run `.uild.ps1 -Test` (expect 230 .NET and 20 front end tests green), and run
+`& 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe' --status` (expect IPC 1.8). Then report in Polish in a
+few lines and continue with HANDOFF.md section 0 (next steps).
 ```
 
 Useful commands:
