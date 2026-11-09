@@ -1,6 +1,6 @@
 # Stage 3: power, session and display (spike R4)
 
-Date: 2026-11-01. Branch `stage-3-power`, build installed with `install-dev.ps1` on the owner's PC. All results
+Date: 2026-11-01. Branch `stage-3-power`, build installed with `install-dev.ps1` on the author's PC. All results
 below come from the Service log (`C:\ProgramData\RGBcontroller\logs\service-20261101.log`) and
 `tools\Measure-TimeToFirstLight.ps1`.
 
@@ -61,4 +61,4 @@ investigated); the lock profile is shown for that time, which is invisible while
 ## Gate
 
 Passed on 2026-11-01. The SPEC gate asks for 10 sleep/resume cycles and 3 hibernate cycles; the logs show 3 sleeps
-and no hibernate. The owner reported "everything works" and closed the gate without the remaining cycles.
+and no hibernate. The author reported "everything works" and closed the gate without the remaining cycles.

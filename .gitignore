@@ -50,3 +50,6 @@ Desktop.ini
 
 # Local hardware evidence (owner machine details), kept out of the public repo
 reference/
+
+# Local working notes and AI tooling (kept on the author's disk only)
+docs/spikes/stage5-ui-plan.md

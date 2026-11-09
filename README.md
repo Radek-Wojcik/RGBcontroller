@@ -2,9 +2,9 @@
 
 Windows controller for PC RGB lighting and an Adalight ambilight strip: synchronized effects on every OpenRGB device, a screen-mirroring strip behind the monitor, and a background service that replaces OpenRGB's Effects plugin (about 2.6% CPU).
 
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![React 19](https://img.shields.io/badge/UI-React_19_%2B_WebView2-149ECA) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Status: stage 5 of 6](https://img.shields.io/badge/status-stage_5_of_6-orange)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![React 19](https://img.shields.io/badge/UI-React_19_%2B_WebView2-149ECA) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Status: stage 5 of 6](https://img.shields.io/badge/status-stage_5_of_6-orange) [![CI](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml/badge.svg)](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml)
 
-<img src="docs/assets/ui-dashboard.png" alt="Dashboard: the ambilight tile draws the strip's 133 LEDs around the monitor in their live colors; tiles for pump and fans, board, RAM, keyboard, mouse and GPU set effect, palette, speed, wave length, brightness and frame rate" width="900">
+<img src="docs/assets/ui-dashboard.png" alt="Dashboard: the ambilight tile draws the strip's 133 LEDs around the monitor in their live colors; tiles for pump and fans, motherboard, RAM, keyboard, mouse and GPU set effect, palette, speed, wave length, brightness and frame rate" width="900">
 
 > **Status: stage 5 of 6.** The Service, the tray Agent with screen ambilight and hotkeys, and the UI run on the author's PC. The installer (stage 6) is not built yet: installation is a developer install from source, and the default device mapping is the author's hardware (see [Hardware configuration](#hardware-configuration)).
 
@@ -36,7 +36,7 @@ Windows controller for PC RGB lighting and an Adalight ambilight strip: synchron
 | Service | `ServiceBase` with power and session events, `PowerSettingRegisterNotification` for the display state, `CM_Register_Notification` for USB arrivals, Win32 job object |
 | Agent | WinForms tray icon and menu, `RegisterHotKey` |
 | UI | WPF + WebView2 shell; React 19, TypeScript 7, Vite 8 front end |
-| IPC | Named pipes with StreamJsonRpc 2.26 (System.Text.Json formatter), versioned protocol (1.5) |
+| IPC | Named pipes with StreamJsonRpc 2.26 (System.Text.Json formatter), versioned protocol (1.9) |
 | Logging | Serilog 4.4, rolling files |
 | Tests | xUnit v3 on Microsoft.Testing.Platform (fake OpenRGB SDK server, fake serial port), Vitest |
 
@@ -51,7 +51,7 @@ flowchart LR
     C[--status / --profile / --group] -->|control pipe| S
 ```
 
-Only the Service touches hardware. It runs without a logged-in user, so lighting starts on the logon screen. The Agent captures the screen and sends strip colors to the Service; the UI edits the configuration through the Service, which validates and saves it. The full specification is in [SPEC.md](SPEC.md).
+Only the Service touches hardware. It runs without a logged-in user, so lighting starts on the logon screen. The Agent captures the screen and sends strip colors to the Service; the UI edits the configuration through the Service, which validates and saves it. The full specification is in [docs/SPECIFICATION.md](docs/SPECIFICATION.md).
 
 ## Getting started
 
@@ -108,8 +108,8 @@ Open it from the tray, the Desktop shortcut or the Start menu. Closing the windo
 
 | Page | What it does |
 |---|---|
-| Dashboard | Live strip preview, strip mode, brightness and solid color; one tile per device group with effect, palette, speed, wave length, brightness and frame rate cap |
-| Devices | OpenRGB devices, zones, LED counts and the group that drives each zone |
+| Dashboard | Live strip preview, strip mode, brightness and solid color; one tile per device group (pump and fans, motherboard, RAM, keyboard, mouse, GPU) drawn like the hardware (keys, rings, sticks) in the colors it shows right now, with effect, palette, speed, wave length, brightness and frame rate cap |
+| Devices | OpenRGB devices, zones, LED counts and the group that drives each zone; the mapping wizard describes what is plugged into each motherboard RGB header (pump ring, fan rings, strips) |
 | Ambilight | Strip layout, test pattern, response (attack, release, fade-in) and picture settings (edge depth, black threshold, gamma, saturation, letterbox detection) |
 | Profiles | Activate a profile, master brightness, choose the logon-screen and lock profiles |
 | Hotkeys | Record combinations and assign actions |
@@ -141,7 +141,7 @@ $exe = 'C:\Program Files\RGBcontroller\RGBcontroller.Service.exe'
 
 ## Hardware configuration
 
-The defaults are the author's PC: an ASUS TUF GAMING H670-PRO WIFI D4 with three ARGB headers (pump and fans), HyperX Predator RGB DDR4, a Gigabyte RTX 3080, a Razer Ornata Chroma V2, a Logitech G502 HERO and a 133-LED WS2812B strip on a CH340-based Adalight box. Device groups match OpenRGB device names exactly, so on other hardware edit `lighting.groups` in the configuration (Devices shows the names OpenRGB reports).
+The defaults are the author's PC: an ASUS TUF GAMING H670-PRO WIFI D4 with three ARGB headers (pump and fans), HyperX Predator RGB DDR4, a Gigabyte RTX 3080, a Razer Ornata Chroma V2, a Logitech G502 HERO and a WS2812B strip (133 LEDs) on a CH340-based Adalight box. Device groups match OpenRGB device names exactly, so on other hardware edit `lighting.groups` in the configuration (Devices shows the names OpenRGB reports).
 
 The configuration lives in `%ProgramData%\RGBcontroller\config\config.json`. The UI changes it through the Service; editing the file by hand needs administrator rights and a Service restart.
 
@@ -156,7 +156,7 @@ The configuration lives in `%ProgramData%\RGBcontroller\config\config.json`. The
 | `strip.currentLimitMilliamps` | `4500` | Estimated current limit (6.5 mA per fully lit channel) |
 | `capture.*` | 30 FPS, gamma 1.5 | Screen pipeline: rates, edge depth, black threshold, attack and release, letterbox detection |
 | `hotkeys.bindings` | Ctrl+F9 to Ctrl+F12 | Global hotkeys |
-| `openRgb.zoneSizes` | 3 x 20 | LED counts of the motherboard ARGB headers |
+| `openRgb.zoneSizes` | 3 x 20 | LED counts of the motherboard ARGB headers (set in the mapping wizard; applied without a restart) |
 
 ## Troubleshooting
 
@@ -188,7 +188,7 @@ src/
 ui/                        React + TypeScript front end (Vite)
 tests/RGBcontroller.Tests/ unit tests with a fake OpenRGB SDK server and a fake serial port
 tools/                     pinned OpenRGB copy, front end build, icon, CPU and time-to-first-light measurement
-docs/                      spike reports with hardware results, screenshots
+docs/                      specification, spike reports with hardware results, screenshots
 ```
 
 ## Testing
@@ -197,7 +197,7 @@ docs/                      spike reports with hardware results, screenshots
 .\build.ps1 -Test
 ```
 
-223 .NET tests and 9 front end tests: configuration, IPC, the Adalight writer against a fake serial port, effects and the lighting engine, the ambilight pipeline and letterbox detection, the session policy, the OpenRGB supervisor against an in-process fake SDK server, the UI bridge and the strip layout in the front end.
+231 .NET tests and 20 front end tests: configuration, IPC, the Adalight writer against a fake serial port, effects and the lighting engine, the ambilight pipeline and letterbox detection, the session policy, the OpenRGB supervisor against an in-process fake SDK server, the UI bridge and the strip layout in the front end.
 
 ## Roadmap
 
@@ -207,8 +207,12 @@ Each stage ends with a hardware test gate on the target PC.
 2. ~~**Effect engine**~~ Done (`v0.2.0-stage2`).
 3. ~~**Power and session handling**~~ Done (`v0.3.0-stage3`).
 4. **Agent and ambilight**: built; hardware gate in progress.
-5. **UI**: built; the device mapping wizard, palette editor and live previews of every device are next.
+5. **UI**: live previews of every device and the device mapping wizard are done; the strip layout wizard, palette editor, profile management and diagnostics page are next.
 6. **Installer and hardening**.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
