@@ -123,6 +123,12 @@ public sealed class BridgeTests
 
         public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
 
+        public Task<LogTail> GetLogTailAsync(LogTailRequest request, CancellationToken cancellationToken) => Task.FromResult(new LogTail("x.log", [request.Component]));
+
+        public Task<CommandResult> RestartOpenRgbAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public Task<CommandResult> RescanDevicesAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
         public IdentifyRequest? LastIdentify { get; private set; }
 
         public Task<CommandResult> IdentifyAsync(IdentifyRequest request, CancellationToken cancellationToken)

@@ -323,3 +323,4 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 .palette-bar { height: 22px; border: 1px solid var(--line); margin-bottom: 10px; }
 button.danger { border-color: var(--bad, #e5484d); color: var(--bad, #e5484d); }
+.logbox { margin: 8px 0; max-height: 280px; overflow: auto; padding: 8px 10px; background: var(--bg, #0b0d12); border: 1px solid var(--line); font: 11.5px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }

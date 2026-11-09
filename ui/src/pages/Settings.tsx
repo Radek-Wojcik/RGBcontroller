@@ -1,12 +1,14 @@
+import { bridge } from "../bridge";
 import { isTurnedOff, setTurnOff, type TurnOffSituation } from "../config";
 import { useStore } from "../store";
 import { Empty, NumberField, Panel, Segmented, StatusDot, Toggle } from "../ui";
+import { LogViewer } from "./LogViewer";
 
 export type Accent = "cyan" | "magenta" | "acid";
 
 /** Power policy (SPEC 4 turn-off sets), strip hardware, diagnostics and personalization. */
 export function Settings({ accent, onAccent }: { accent: Accent; onAccent(accent: Accent): void }) {
-  const { state, snapshot, devices, connection, editConfig } = useStore();
+  const { state, snapshot, devices, connection, editConfig, run } = useStore();
   if (!state || !snapshot) return <Empty>Waiting for the Service...</Empty>;
   const config = snapshot.config;
   const names = devices?.devices.map(d => d.name) ?? [];
@@ -75,7 +77,18 @@ export function Settings({ accent, onAccent }: { accent: Accent; onAccent(accent
           <dt>Devices</dt><dd className="num">{devices?.devices.length ?? 0}</dd>
           <dt>Config revision</dt><dd className="num">{snapshot.revision}</dd>
         </dl>
+        <div className="row buttons">
+          <button disabled={!connection?.connected} onClick={() => run(() => bridge.call("rescanDevices"))}>Rescan devices</button>
+          <button disabled={!connection?.connected} onClick={() => run(() => bridge.call("reopenStrip"))}>Reconnect strip</button>
+          <button disabled={!connection?.connected} onClick={() => run(() => bridge.call("restartOpenRgb"))}>Restart OpenRGB</button>
+        </div>
+        <p className="dim">
+          Rescan when a device is missing after it was plugged in. Restart OpenRGB when devices stop reacting; the lights
+          go dark for a few seconds. Reconnect the strip when the LED box stops taking frames.
+        </p>
       </Panel>
+
+      <LogViewer />
 
       <Panel title="Look">
         <div className="field">

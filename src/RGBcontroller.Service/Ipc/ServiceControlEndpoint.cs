@@ -45,6 +45,14 @@ internal interface IControllableHost
     /// <returns>Null on success, otherwise a message for the client.</returns>
     string? ReopenStrip();
 
+    LogTail GetLogTail(string component, int lines);
+
+    /// <returns>Null on success, otherwise a message for the client.</returns>
+    string? RestartOpenRgb();
+
+    /// <returns>Null on success, otherwise a message for the client.</returns>
+    string? RescanDevices();
+
     /// <param name="duration">Zero ends the identification.</param>
     /// <returns>Null on success, otherwise a message for the client.</returns>
     string? Identify(IdentifyRequest request, TimeSpan duration);
@@ -217,6 +225,29 @@ internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubsc
     public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken)
     {
         var error = host.ReopenStrip();
+        return Task.FromResult(new CommandResult(error is null, error));
+    }
+
+    public Task<LogTail> GetLogTailAsync(LogTailRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Component != "service" || request.Lines is < 1 or > LogTailRequest.MaxLines)
+        {
+            throw new ArgumentException($"A log tail is 1-{LogTailRequest.MaxLines} lines of the 'service' log (the Agent logs in the user profile, out of the Service's reach).");
+        }
+
+        return Task.FromResult(host.GetLogTail(request.Component, request.Lines));
+    }
+
+    public Task<CommandResult> RestartOpenRgbAsync(CancellationToken cancellationToken)
+    {
+        var error = host.RestartOpenRgb();
+        return Task.FromResult(new CommandResult(error is null, error));
+    }
+
+    public Task<CommandResult> RescanDevicesAsync(CancellationToken cancellationToken)
+    {
+        var error = host.RescanDevices();
         return Task.FromResult(new CommandResult(error is null, error));
     }
 

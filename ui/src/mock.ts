@@ -90,6 +90,17 @@ export function createMockHost(): Host {
     setAllOff: p => ((allOff = p.off), emit({ event: "state", data: state() }), ok),
     showStripTest: () => ok,
     showStripMarker: () => ok,
+    getLogTail: p => ({
+      file: `${p.component}-20261109.log`,
+      lines: [
+        "2026-11-09 18:05:13.600 +01:00 [INF] Started OpenRGB pid 36440",
+        "2026-11-09 18:05:14.674 +01:00 [INF] Strip Connected COM7",
+        "2026-11-09 18:05:15.140 +01:00 [INF] Connected to OpenRGB SDK (protocol 5, server 5)",
+        "2026-11-09 18:05:20.156 +01:00 [WRN] Example warning line",
+      ],
+    }),
+    restartOpenRgb: () => ok,
+    rescanDevices: () => ok,
     identify: () => ok,
     getAgentSettings: () => ({}),
     getConfig: () => ({ revision, config }),

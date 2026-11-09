@@ -97,6 +97,10 @@ internal sealed class OpenRgbSupervisor
     /// <summary>Number of OpenRGB launches so far (1 = no restart).</summary>
     public int Starts => Volatile.Read(ref _starts);
 
+    private volatile IOpenRgbProcess? _current;
+    private volatile bool _manualRestart;
+    private volatile bool _rescanNow;
+
     /// <summary>Raised after each successful (re)apply with the device count.</summary>
     public event Action<int>? DevicesApplied;
 
@@ -145,6 +149,35 @@ internal sealed class OpenRgbSupervisor
         }
     }
 
+    /// <summary>Diagnostics: rescans the devices now, without the hot-plug settle delay of the USB path.</summary>
+    public void RequestRescan() => NotifyResumedNow();
+
+    /// <summary>Diagnostics: stops OpenRGB and starts it again at once, without a failure backoff.</summary>
+    public void RequestRestart()
+    {
+        var process = _current;
+        if (process is null)
+        {
+            return;
+        }
+
+        _manualRestart = true;
+        try
+        {
+            process.Kill();
+        }
+        catch (InvalidOperationException)
+        {
+            // It has just exited; the supervisor restarts it anyway.
+        }
+    }
+
+    private void NotifyResumedNow()
+    {
+        _rescanNow = true;
+        NotifyResumed();
+    }
+
     /// <summary>Runs until <paramref name="stopToken"/> is cancelled, then sends black to all devices and stops OpenRGB.</summary>
     public async Task RunAsync(CancellationToken stopToken)
     {
@@ -191,13 +224,29 @@ internal sealed class OpenRgbSupervisor
 
             using (process)
             {
-                await RunSessionAsync(process, stopToken).ConfigureAwait(false);
-                process.Kill();
+                _current = process;
+                try
+                {
+                    await RunSessionAsync(process, stopToken).ConfigureAwait(false);
+                    process.Kill();
+                }
+                finally
+                {
+                    _current = null;
+                }
             }
 
             if (stopToken.IsCancellationRequested)
             {
                 break;
+            }
+
+            if (_manualRestart)
+            {
+                _manualRestart = false;
+                failures = 0;
+                _log.Information("Restarting OpenRGB as requested");
+                continue;
             }
 
             failures = _clock.Elapsed - startedAt >= _timings.StableUptime ? 1 : failures + 1;
@@ -247,7 +296,15 @@ internal sealed class OpenRgbSupervisor
 
                 if (first == process.Exited)
                 {
-                    _log.Error("OpenRGB pid {Pid} exited unexpectedly", process.Id);
+                    if (_manualRestart)
+                    {
+                        _log.Information("OpenRGB pid {Pid} stopped for a restart", process.Id);
+                    }
+                    else
+                    {
+                        _log.Error("OpenRGB pid {Pid} exited unexpectedly", process.Id);
+                    }
+
                     return;
                 }
 
@@ -287,8 +344,11 @@ internal sealed class OpenRgbSupervisor
                 if (first == resumed)
                 {
                     resumed = null;
-                    var settle = TimeSpan.FromMilliseconds(_config.ResumeRescanDelayMilliseconds);
-                    _log.Information("Resumed from sleep; rescanning devices in {Delay} ms", (long)settle.TotalMilliseconds);
+                    var requested = _rescanNow;
+                    _rescanNow = false;
+                    var settle = requested ? TimeSpan.Zero : TimeSpan.FromMilliseconds(_config.ResumeRescanDelayMilliseconds);
+                    _log.Information(requested ? "Rescanning devices as requested" : "Resumed from sleep; rescanning devices in {Delay} ms",
+                        (long)settle.TotalMilliseconds);
                     await RescanAsync(client, lighting, changed, settle, stopToken).ConfigureAwait(false);
 
                     // The pending wait above took this rescan's first notice; it is handled now.

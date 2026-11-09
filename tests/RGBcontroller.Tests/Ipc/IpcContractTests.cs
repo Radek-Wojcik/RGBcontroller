@@ -193,6 +193,12 @@ public sealed class IpcContractTests
 
         public Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
 
+        public Task<LogTail> GetLogTailAsync(LogTailRequest request, CancellationToken cancellationToken) => Task.FromResult(new LogTail(string.Empty, []));
+
+        public Task<CommandResult> RestartOpenRgbAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
+        public Task<CommandResult> RescanDevicesAsync(CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
         public Task<CommandResult> IdentifyAsync(IdentifyRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new CommandResult(true, request.ToString()));
 
