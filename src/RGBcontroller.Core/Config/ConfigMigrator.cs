@@ -33,7 +33,7 @@ public sealed class ConfigMigrator
     }
 
     /// <summary>Migrations shipped with the app.</summary>
-    public static ConfigMigrator Default { get; } = new([new LightingV2Migration()], AppConfig.CurrentSchemaVersion);
+    public static ConfigMigrator Default { get; } = new([new LightingV2Migration(), new BoardGroupRenameMigration()], AppConfig.CurrentSchemaVersion);
 
     public int TargetVersion { get; }
 

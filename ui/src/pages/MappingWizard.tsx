@@ -15,8 +15,8 @@ const MAX_HEADER_LEDS = 300;
 
 interface Pick { device: DeviceInfo; zone: ZoneInfo }
 
-/** What the hardware shows: the whole zone, one component, or only the LED a ring has on top. */
-type View = { kind: "zone" } | { kind: "segment" | "top"; index: number };
+/** What the hardware shows: the whole zone, one part, or only the LED a ring has on top. */
+type View = { kind: "zone" } | { kind: "segment" | "top" | "probe"; index: number };
 
 /** Zones the owner can describe: single LEDs and lines. Matrix zones (the keyboard) have their shape from the device. */
 function editableZones(devices: DeviceInfo[]): Pick[] {
@@ -26,7 +26,7 @@ function editableZones(devices: DeviceInfo[]): Pick[] {
 const zoneKey = (p: Pick) => `${p.device.index}/${p.zone.name}`;
 
 /**
- * SPEC 7.4: lights one zone or one component of it at a time, and the owner says what it is (ring or line, how many
+ * SPEC 7.4: lights one zone or one part of it at a time, and the owner says what it is (ring or line, how many
  * LEDs, which way round, which LED is on top). Saves the same layout structures the defaults use.
  */
 export function MappingWizard({ onClose }: { onClose(): void }) {
@@ -45,9 +45,9 @@ export function MappingWizard({ onClose }: { onClose(): void }) {
   return (
     <Panel title="Mapping wizard" wide meta={close}>
       <p className="dim">
-        Pick a zone. Every other OpenRGB device goes dark and the zone shows white, with its first LEDs green and its last LEDs
-        red. Say what you see: how many LEDs belong to each component, which way round it runs and, for a ring, which LED is on
-        top. Nothing is saved until you press Save.
+        This tells the app what is plugged into an RGB header of the motherboard (for example a pump ring and fans), so effects
+        such as Radial look right on them. Pick a header, then follow steps 1 to 3 while you look at your PC: the header lights
+        up white and everything else goes dark. Nothing is saved until you press Save mapping.
       </p>
       <Select label="Zone" value={zoneKey(pick)}
         options={picks.map(p => ({ value: zoneKey(p), label: `${p.device.name} · ${p.zone.name} (${p.zone.ledCount} LEDs)` }))}
@@ -70,6 +70,7 @@ function ZoneEditor({ pick }: { pick: Pick }) {
 
   const target = useMemo(() => {
     if (view.kind === "zone") return { start: 0, count: zone.ledCount };
+    if (view.kind === "probe") return { start: Math.min(view.index, zone.ledCount - 1), count: 1 };
     const index = Math.min(view.index, segments.length - 1);
     return view.kind === "top" ? { start: ringTop(segments, index), count: 1 } : segmentRange(segments, index);
   }, [view, segments, zone.ledCount]);
@@ -87,6 +88,7 @@ function ZoneEditor({ pick }: { pick: Pick }) {
   const dirty = asLayout(segments) !== asLayout(saved);
   const configuredSize = config.openRgb.zoneSizes.find(z => z.device === device.name && z.zone === zone.name)?.leds;
   const change = (i: number, c: Partial<Segment>) => setSegments(s => changeSegment(s, i, c));
+  const probe = view.kind === "probe" ? view.index : 0;
   const showing = (i: number) => view.kind === "segment" && view.index === i;
 
   const live = colors.get(device.index);
@@ -106,32 +108,52 @@ function ZoneEditor({ pick }: { pick: Pick }) {
       </div>
 
       {zone.resizable && (
-        <div className="row">
-          <NumberField label={`LEDs on ${zone.name}`} value={configuredSize ?? zone.ledCount} min={1} max={MAX_HEADER_LEDS}
-            onCommit={leds => editConfig(c => applyZoneSize(c, device.name, zone.name, leds))} />
-          <p className="dim field">
-            How many LEDs the chain has in total (pump ring, fans and anything else on the header). OpenRGB applies a new
-            count when it detects the devices again (after sleep or a Service restart).
+        <section className="wizard-step">
+          <h3>Step 1 · How many LEDs does this header have?</h3>
+          <p className="dim">
+            Press "Next LED" and watch the hardware: one LED lights up at a time. Keep pressing until nothing lights up any
+            more; the number of the last LED that did light up is the LED count. If you reach the end of the list and it is
+            still lit, the chain is longer: type a higher count below first.
           </p>
-        </div>
+          <div className="row buttons">
+            <button onClick={() => setView({ kind: "probe", index: Math.max(0, probe - 1) })} disabled={view.kind !== "probe" || probe <= 0}>Previous LED</button>
+            <button className="primary" onClick={() => setView({ kind: "probe", index: view.kind === "probe" ? Math.min(zone.ledCount - 1, probe + 1) : 0 })}
+              disabled={view.kind === "probe" && probe >= zone.ledCount - 1}>Next LED</button>
+            <b className="num">{view.kind === "probe" ? `Lit now: LED ${probe + 1} of ${zone.ledCount}` : "Press Next LED to start"}</b>
+          </div>
+          <div className="row buttons">
+            <button disabled={view.kind !== "probe" || probe < 1 || probe === (configuredSize ?? zone.ledCount)}
+              onClick={() => void editConfig(c => applyZoneSize(c, device.name, zone.name, probe))}>
+              Nothing lit up now? Then LED {probe} was the last one: use {probe} LEDs
+            </button>
+            <NumberField label="Or type the LED count" value={configuredSize ?? zone.ledCount} min={1} max={MAX_HEADER_LEDS}
+              onCommit={leds => editConfig(c => applyZoneSize(c, device.name, zone.name, leds))} />
+          </div>
+          <p className="dim">OpenRGB applies a new count when it detects the devices again (after sleep or a Service restart).</p>
+        </section>
       )}
 
+      <h3>{zone.resizable ? "Step 2 · Split the LEDs into parts" : "Parts of this zone"}</h3>
+      <p className="dim">
+        Pump ring, fan rings, a strip: each is one part, in the order they are wired. Press "Light up" on a part to see which
+        LEDs it covers, then change its LED count until only that part is lit. The last part takes the rest.
+      </p>
       <table className="grid">
-        <thead><tr><th>Component</th><th>Shape</th><th>LEDs</th><th>Direction</th><th /></tr></thead>
+        <thead><tr><th>Part</th><th>Shape</th><th>LEDs</th><th>Direction</th><th /></tr></thead>
         <tbody>
           {segments.map((s, i) => (
             <tr key={i}>
-              <td><button className={showing(i) ? "primary" : ""} onClick={() => setView({ kind: "segment", index: i })}>Show {i + 1}</button></td>
+              <td><button className={showing(i) ? "primary" : ""} onClick={() => setView({ kind: "segment", index: i })}>Light up {i + 1}</button></td>
               <td>
-                <select aria-label={`Shape of component ${i + 1}`} value={s.shape} onChange={e => change(i, { shape: e.target.value as SegmentShape })}>
+                <select aria-label={`Shape of part ${i + 1}`} value={s.shape} onChange={e => change(i, { shape: e.target.value as SegmentShape })}>
                   {SHAPES.map(x => <option key={x}>{x}</option>)}
                 </select>
               </td>
               <td className="num">
                 {i < count - 1
-                  ? <NumberField label={`LEDs of component ${i + 1}`} value={s.leds} min={1} max={zone.ledCount - 1}
+                  ? <NumberField label={`LEDs of part ${i + 1}`} value={s.leds} min={1} max={zone.ledCount - 1}
                       onCommit={leds => { setSegments(x => resizeSegment(x, i, leds)); setView({ kind: "segment", index: i }); }} />
-                  : <span title="The last component takes the remaining LEDs">{s.leds} <span className="dim">(rest)</span></span>}
+                  : <span title="The last part takes the remaining LEDs">{s.leds} <span className="dim">(rest)</span></span>}
               </td>
               <td>
                 {s.shape === "Ring" && (
@@ -152,7 +174,7 @@ function ZoneEditor({ pick }: { pick: Pick }) {
               </td>
               <td>
                 {count > 1 && (
-                  <button className="ghost" aria-label={`Remove component ${i + 1}`}
+                  <button className="ghost" aria-label={`Remove part ${i + 1}`}
                     onClick={() => { setSegments(x => removeSegment(x, i)); setView({ kind: "zone" }); }}>×</button>
                 )}
               </td>
@@ -162,19 +184,20 @@ function ZoneEditor({ pick }: { pick: Pick }) {
       </table>
 
       <ul className="profile-groups">
-        {segments.map((s, i) => <li key={i}><span>Component {i + 1}</span><b>{describeSegment(s)}</b></li>)}
+        {segments.map((s, i) => <li key={i}><span>Part {i + 1}</span><b>{describeSegment(s)}</b></li>)}
       </ul>
       {segments.some(s => s.shape === "Ring") && (
         <p className="dim">
-          Direction: look at the ring from the front and go clockwise from the green LEDs; you should meet white LEDs first and
-          red last. If you meet red first, tick Counterclockwise. Then set "LED on top" until the single lit LED sits at 12 o'clock.
+          Step 3 · Ring direction: press "Show top" and set "LED on top" until the single lit LED sits at 12 o'clock when you
+          look at the ring from the front. Then press "Light up" on the part: the lit LEDs should run clockwise; if they run the
+          other way, tick Counterclockwise.
         </p>
       )}
 
       <div className="row buttons">
-        <button onClick={() => setView({ kind: "zone" })}>Light whole zone</button>
+        <button onClick={() => setView({ kind: "zone" })}>Light whole header</button>
         <button disabled={segments[count - 1].leds < 2}
-          onClick={() => { setSegments(splitLast); setView({ kind: "segment", index: count }); }}>Add a component</button>
+          onClick={() => { setSegments(splitLast); setView({ kind: "segment", index: count }); }}>Add a part</button>
         <button disabled={!dirty} onClick={() => { setSegments(saved); setView({ kind: "zone" }); }}>Undo changes</button>
         <button className="primary" disabled={!dirty}
           onClick={() => void editConfig(c => applyLayout(c, toLayout(device.name, zone.name, segments)))}>Save mapping</button>
