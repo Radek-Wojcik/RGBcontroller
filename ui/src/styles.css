@@ -122,6 +122,7 @@ main { flex: 1; overflow: auto; padding: 20px 24px 40px; }
 .panel { display: flex; flex-direction: column; }
 .panel-body { flex: 1; }
 .panel.wide { grid-column: span 2; }
+.panel.wide.tall { grid-column: 1 / -1; }
 .panel.is-active, .panel:focus-within { background: linear-gradient(135deg, var(--accent), var(--line-2) 35%, var(--line)); }
 .panel.is-off .panel-body { opacity: 0.72; }
 .panel-body {
@@ -310,9 +311,10 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .led-line.vertical { grid-template-columns: 10px; }
 .led-ring { position: relative; flex: none; }
 .led-ring i { position: absolute; width: 9px; transform: translate(-50%, -50%); }
-.led-keys { display: grid; gap: 3px; }
-.led-keys i { border-radius: 3px; width: 100%; max-width: 20px; aspect-ratio: 1; }
-.led-keys b.gap { aspect-ratio: 1; }
+.led-zone:has(.led-keys) { flex: 1 1 100%; }
+.led-keys { display: grid; gap: 3px; width: 100%; max-width: 560px; }
+.led-keys i { border-radius: 3px; width: 100%; aspect-ratio: 1; }
+.led-keys b.gap { display: block; aspect-ratio: 1; }
 
 /* ---------- mapping wizard steps ---------- */
 
