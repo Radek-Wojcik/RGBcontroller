@@ -182,6 +182,8 @@ public sealed class IpcContractTests
 
         public Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
 
+        public Task<CommandResult> ShowStripMarkerAsync(StripMarkerRequest request, CancellationToken cancellationToken) => Task.FromResult(new CommandResult(true, null));
+
         public Task<ConfigSnapshot> GetConfigAsync(CancellationToken cancellationToken) => Task.FromResult(new ConfigSnapshot(7, FullConfig));
 
         public Task<ConfigUpdateResult> UpdateConfigAsync(ConfigUpdateRequest request, CancellationToken cancellationToken) =>

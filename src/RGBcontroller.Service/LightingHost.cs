@@ -521,6 +521,19 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         _log.Information(on ? "Strip test pattern for {Seconds} s" : "Strip test pattern ended", duration.TotalSeconds);
     }
 
+    public void ShowStripMarker(int start, int count, TimeSpan duration)
+    {
+        if (duration <= TimeSpan.Zero)
+        {
+            ShowStripTest(TimeSpan.Zero);
+            return;
+        }
+
+        _lighting?.SetStripMarker(start, count);
+        _stripTestEnd?.Change(duration, Timeout.InfiniteTimeSpan);
+        _log.Information("Strip marker LEDs {Start}+{Count} for {Seconds} s", start, count, duration.TotalSeconds);
+    }
+
     public void OnScreenColors(ReadOnlySpan<RgbColor> colors)
     {
         if (!_screenLive)

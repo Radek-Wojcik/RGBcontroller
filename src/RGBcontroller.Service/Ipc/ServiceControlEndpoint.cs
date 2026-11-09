@@ -30,6 +30,8 @@ internal interface IControllableHost
 
     void ShowStripTest(TimeSpan duration);
 
+    void ShowStripMarker(int start, int count, TimeSpan duration);
+
     ConfigSnapshot GetConfig();
 
     ConfigUpdateResult UpdateConfig(long expectedRevision, AppConfig config);
@@ -151,6 +153,18 @@ internal sealed class ServiceControlEndpoint(IControllableHost host, IStateSubsc
         }
 
         host.ShowStripTest(TimeSpan.FromSeconds(seconds));
+        return Task.FromResult(new CommandResult(true, null));
+    }
+
+    public Task<CommandResult> ShowStripMarkerAsync(StripMarkerRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Seconds is < 0 or > 600 || request.Start is < 0 or > MaxIdentifyLeds || request.Count is < 1 or > MaxIdentifyLeds)
+        {
+            return Task.FromResult(new CommandResult(false, $"A strip marker lights 1-{MaxIdentifyLeds} LEDs for 0-600 seconds."));
+        }
+
+        host.ShowStripMarker(request.Start, request.Count, TimeSpan.FromSeconds(request.Seconds));
         return Task.FromResult(new CommandResult(true, null));
     }
 

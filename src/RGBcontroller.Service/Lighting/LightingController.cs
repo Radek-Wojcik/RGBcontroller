@@ -95,6 +95,13 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
         _loop.Wake();
     }
 
+    /// <inheritdoc cref="LightingEngine.SetStripMarker"/>
+    public void SetStripMarker(int start, int count)
+    {
+        _engine.SetStripMarker(start, count);
+        _loop.Wake();
+    }
+
     /// <inheritdoc cref="LightingEngine.SetIdentify"/>
     public string? SetIdentify(IdentifyTarget? target)
     {

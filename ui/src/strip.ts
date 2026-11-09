@@ -85,3 +85,25 @@ export function angleHue(x: number, y: number, turn = 0): number {
   const degrees = (Math.atan2(y - 0.5, x - 0.5) * 180) / Math.PI;
   return (((degrees + turn * 360) % 360) + 360) % 360;
 }
+
+/** The longest run of consecutive LED numbers the layout places on one edge (what the wizard lights to check an edge). */
+export function edgeRun(config: StripLayoutConfig, ledCount: number, edge: Edge): { start: number; count: number } | null {
+  let best: { start: number; count: number } | null = null;
+  let start = -1;
+  const leds = placeStrip(config, ledCount);
+  for (let i = 0; i <= leds.length; i++) {
+    const on = i < leds.length && leds[i]?.edge === edge;
+    if (on && start < 0) start = i;
+    if (!on && start >= 0) {
+      if (!best || i - start > best.count) best = { start, count: i - start };
+      start = -1;
+    }
+  }
+
+  return best;
+}
+
+/** The corner nearest to a point (0..1 over the screen). */
+export function nearestCorner(x: number, y: number): StripLayoutConfig["startCorner"] {
+  return y < 0.5 ? (x < 0.5 ? "TopLeft" : "TopRight") : (x < 0.5 ? "BottomLeft" : "BottomRight");
+}

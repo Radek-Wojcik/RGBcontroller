@@ -209,6 +209,7 @@ export interface BridgeMethods {
   changeStrip: [StripChangeRequest, CommandResult];
   setAllOff: [{ off: boolean }, CommandResult];
   showStripTest: [{ seconds: number }, CommandResult];
+  showStripMarker: [{ start: number; count: number; seconds: number }, CommandResult];
   getAgentSettings: [undefined, unknown];
   getConfig: [undefined, ConfigSnapshot];
   updateConfig: [{ expectedRevision: number; config: AppConfig }, ConfigUpdateResult];

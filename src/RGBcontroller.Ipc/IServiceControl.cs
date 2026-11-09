@@ -43,6 +43,13 @@ public interface IServiceControl
     /// </summary>
     Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Lights only the strip LEDs <see cref="StripMarkerRequest.Start"/> .. + <see cref="StripMarkerRequest.Count"/> - 1 in
+    /// white for <see cref="StripMarkerRequest.Seconds"/>, 0 ends it (and the test pattern); for the strip layout wizard
+    /// (since 1.10).
+    /// </summary>
+    Task<CommandResult> ShowStripMarkerAsync(StripMarkerRequest request, CancellationToken cancellationToken);
+
     /// <summary>Moves the active profile by <paramref name="delta"/> places in config order, wrapping around (since 1.3).</summary>
     Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken);
 
@@ -173,6 +180,9 @@ public sealed record DeviceColors(int Index, byte[] Rgb);
 /// <param name="Start">First LED of the range inside the zone, 0-based.</param>
 /// <param name="Count">LEDs in the range.</param>
 /// <param name="Seconds">How long the range stays lit (1-300); 0 returns to the profile.</param>
+/// <summary>Strip LEDs to light for the layout wizard; indices past the strip are ignored.</summary>
+public sealed record StripMarkerRequest(int Start, int Count, int Seconds);
+
 public sealed record IdentifyRequest(int DeviceIndex, string? Zone, int Start, int Count, int Seconds);
 
 public sealed record DeviceList(IReadOnlyList<DeviceInfo> Devices, int StripLedCount);

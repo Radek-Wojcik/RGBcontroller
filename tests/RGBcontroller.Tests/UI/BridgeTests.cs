@@ -109,6 +109,8 @@ public sealed class BridgeTests
 
         public Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken) => Ok();
 
+        public Task<CommandResult> ShowStripMarkerAsync(StripMarkerRequest request, CancellationToken cancellationToken) => Ok();
+
         public Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken) => Ok();
 
         public Task<ConfigSnapshot> GetConfigAsync(CancellationToken cancellationToken) => Task.FromResult(new ConfigSnapshot(3, AppConfig.CreateDefault()));
