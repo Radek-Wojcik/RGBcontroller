@@ -298,5 +298,20 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* ---------- live LEDs of a device group ---------- */
 
 .group-leds { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: #05070a; border: 1px solid var(--line); }
-.led-zone { display: grid; gap: 3px; }
-.led-zone i { aspect-ratio: 1; max-width: 12px; border-radius: 50%; background: #11161f; border: 1px solid var(--line); }
+.led-zone { display: flex; flex-direction: column; gap: 4px; }
+.led-zone-name { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+.led-zone i, .led-keys i, .led-ring i { display: block; aspect-ratio: 1; border-radius: 50%; background: #11161f; border: 1px solid var(--line); }
+.led-parts { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.led-line { display: grid; gap: 3px; }
+.led-line i { width: 10px; }
+.led-line.vertical { grid-template-columns: 10px; }
+.led-ring { position: relative; flex: none; }
+.led-ring i { position: absolute; width: 9px; transform: translate(-50%, -50%); }
+.led-keys { display: grid; gap: 3px; }
+.led-keys i { border-radius: 3px; width: 100%; max-width: 20px; aspect-ratio: 1; }
+.led-keys b.gap { aspect-ratio: 1; }
+
+/* ---------- mapping wizard steps ---------- */
+
+.wizard-step { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 16px; }
+.wizard-step h3, .panel h3 { margin: 12px 0 0; font: 600 13px/1.2 var(--head); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); }

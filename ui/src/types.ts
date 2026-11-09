@@ -33,7 +33,7 @@ export interface AgentState {
 
 export interface CommandResult { success: boolean; message: string | null }
 
-export interface ZoneInfo { name: string; type: number; ledCount: number; resizable: boolean; matrixWidth: number; matrixHeight: number }
+export interface ZoneInfo { name: string; type: number; ledCount: number; resizable: boolean; matrixWidth: number; matrixHeight: number; matrix?: number[] | null }
 export interface DeviceInfo { index: number; name: string; type: number; zones: ZoneInfo[] }
 export interface DeviceList { devices: DeviceInfo[]; stripLedCount: number }
 

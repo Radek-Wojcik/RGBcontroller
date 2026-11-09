@@ -25,7 +25,7 @@ export function createMockHost(): Host {
           ...[1, 2, 3].map(i => ({ name: `Aura Addressable ${i}`, type: 1, ledCount: 20, resizable: true, matrixWidth: 0, matrixHeight: 0 })),
         ],
       },
-      { index: 3, name: "Razer Ornata Chroma V2", type: 5, zones: [{ name: "Keyboard", type: 2, ledCount: 132, resizable: false, matrixWidth: 22, matrixHeight: 6 }] },
+      { index: 3, name: "Razer Ornata Chroma V2", type: 5, zones: [{ name: "Keyboard", type: 2, ledCount: 132, resizable: false, matrixWidth: 22, matrixHeight: 6, matrix: Array.from({ length: 132 }, (_, i) => i) }] },
       { index: 4, name: "G502 HERO Gaming Mouse", type: 6, zones: [{ name: "Primary Zone", type: 0, ledCount: 1, resizable: false, matrixWidth: 0, matrixHeight: 0 }, { name: "Logo Zone", type: 0, ledCount: 1, resizable: false, matrixWidth: 0, matrixHeight: 0 }] },
     ],
   };

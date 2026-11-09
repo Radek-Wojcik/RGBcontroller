@@ -355,7 +355,8 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     {
         var devices = _lighting?.Devices ?? [];
         var list = devices.Select((d, i) => new DeviceInfo(i, d.Name, d.Type,
-            [.. d.Zones.Select(z => new ZoneInfo(z.Name, z.Type, (int)z.LedsCount, z.LedsMin != z.LedsMax, (int)z.MatrixWidth, (int)z.MatrixHeight))])).ToList();
+            [.. d.Zones.Select(z => new ZoneInfo(z.Name, z.Type, (int)z.LedsCount, z.LedsMin != z.LedsMax, (int)z.MatrixWidth, (int)z.MatrixHeight,
+                z.Matrix.Count == 0 ? null : [.. z.Matrix.Select(m => m == uint.MaxValue ? -1 : (int)m)]))])).ToList();
         return new DeviceList(list, CurrentConfig.Strip.Enabled ? CurrentConfig.Strip.LedCount : 0);
     }
 

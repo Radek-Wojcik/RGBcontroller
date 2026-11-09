@@ -54,7 +54,7 @@ public sealed class LightingConfigTests : IDisposable
         var store = new ConfigStore(ConfigPath);
         var config = AppConfig.CreateDefault() with
         {
-            Lighting = new LightingConfig { ActiveProfile = "Night", LockProfile = "Aurora", DefaultGroup = DefaultLighting.BoardGroup },
+            Lighting = new LightingConfig { ActiveProfile = "Night", LockProfile = "Aurora", DefaultGroup = DefaultLighting.MotherboardGroup },
         };
 
         store.Save(config);
@@ -70,7 +70,7 @@ public sealed class LightingConfigTests : IDisposable
     {
         File.WriteAllText(ConfigPath, """
             {
-              "schemaVersion": 2,
+              "schemaVersion": 3,
               "lighting": {
                 "activeProfile": "Mine",
                 "logonProfile": "Mine",

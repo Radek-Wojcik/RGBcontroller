@@ -183,4 +183,5 @@ public sealed record DeviceInfo(int Index, string Name, int Type, IReadOnlyList<
 
 /// <param name="Type">OpenRGB zone type: 0 single, 1 linear, 2 matrix.</param>
 /// <param name="Resizable">True for addressable headers whose LED count is set in openRgb.zoneSizes.</param>
-public sealed record ZoneInfo(string Name, int Type, int LedCount, bool Resizable, int MatrixWidth, int MatrixHeight);
+/// <param name="Matrix">Matrix zones only (since 1.9): the zone-relative LED index at each grid cell, row by row, -1 for a gap.</param>
+public sealed record ZoneInfo(string Name, int Type, int LedCount, bool Resizable, int MatrixWidth, int MatrixHeight, IReadOnlyList<int>? Matrix = null);

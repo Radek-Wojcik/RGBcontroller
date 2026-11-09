@@ -8,7 +8,7 @@ import fixture from "./mock-config.json";
 
 const header = { resizable: true, ledCount: 20 };
 const config = () => structuredClone(fixture) as unknown as AppConfig;
-const layout = (...segments: ZoneLayoutConfig["segments"]): ZoneLayoutConfig => ({ device: "Board", zone: "Header 1", segments });
+const layout = (...segments: ZoneLayoutConfig["segments"]): ZoneLayoutConfig => ({ device: "Motherboard", zone: "Header 1", segments });
 const seg = (leds: number | null, shape: "Ring" | "Line" | "Auto" = "Ring") => ({ leds, shape, vertical: false, reverse: false, offset: 0 });
 
 describe("resolveSegments", () => {
@@ -63,7 +63,7 @@ describe("editing segments", () => {
 describe("saving", () => {
   it("writes the last segment as the rest and drops settings the shape does not use", () => {
     const segments = changeSegment(changeSegment(resolveSegments(layout(seg(8), seg(null)), header), 0, { reverse: true, offset: 2, vertical: true }), 1, { shape: "Line", vertical: true });
-    const saved = toLayout("Board", "Header 1", segments);
+    const saved = toLayout("Motherboard", "Header 1", segments);
 
     expect(saved.segments).toEqual([
       { leds: 8, shape: "Ring", vertical: false, reverse: true, offset: 2 },

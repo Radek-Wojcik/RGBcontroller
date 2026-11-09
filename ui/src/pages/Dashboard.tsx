@@ -91,7 +91,7 @@ function GroupTile({ config, group, effect, profile, devices, colors }: {
     <Panel title={group.name} meta={<span className="num">{leds || "?"} LED · {group.maxFps} fps</span>} className={kind === "Off" ? "is-off" : ""}>
       <div className="swatch" style={{ background: kind === "Off" ? undefined : swatch, animationDuration: flow }} data-flow={flow ? "on" : "off"}
         aria-hidden />
-      <GroupLeds group={group} devices={devices} colors={colors} />
+      <GroupLeds config={config} group={group} devices={devices} colors={colors} />
       <p className="members">{deviceNames.join(" · ")}</p>
       <div className="row">
         <Select label="Effect" value={kind} options={EFFECTS.map(e => ({ value: e, label: EFFECT_LABELS[e] }))}

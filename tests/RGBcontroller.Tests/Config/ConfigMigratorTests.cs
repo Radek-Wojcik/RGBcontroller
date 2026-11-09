@@ -49,6 +49,25 @@ public sealed class ConfigMigratorTests
         Assert.Equal(AppConfig.CurrentSchemaVersion, ConfigMigrator.Default.TargetVersion);
     }
 
+    [Fact]
+    public void Default_RenamesMotherboardGroupAndItsReferences()
+    {
+        var root = JsonNode.Parse("""
+            { "schemaVersion": 2, "lighting": { "defaultGroup": "Board",
+              "groups": [ { "name": "Board" }, { "name": "RAM" } ],
+              "profiles": [ { "name": "P", "groups": [ { "group": "Board" }, { "group": "RAM" } ] } ] } }
+            """)!.AsObject();
+
+        ConfigMigrator.Default.Migrate(root, fromVersion: 2);
+
+        Assert.Equal(3, root["schemaVersion"]!.GetValue<int>());
+        var lighting = root["lighting"]!;
+        Assert.Equal("Motherboard", lighting["defaultGroup"]!.GetValue<string>());
+        Assert.Equal("Motherboard", lighting["groups"]![0]!["name"]!.GetValue<string>());
+        Assert.Equal("RAM", lighting["groups"]![1]!["name"]!.GetValue<string>());
+        Assert.Equal("Motherboard", lighting["profiles"]![0]!["groups"]![0]!["group"]!.GetValue<string>());
+    }
+
     private sealed class Step(int from, List<int> log) : IConfigMigration
     {
         public int FromVersion => from;
