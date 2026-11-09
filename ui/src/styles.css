@@ -324,3 +324,15 @@ table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .palette-bar { height: 22px; border: 1px solid var(--line); margin-bottom: 10px; }
 button.danger { border-color: var(--bad, #e5484d); color: var(--bad, #e5484d); }
 .logbox { margin: 8px 0; max-height: 280px; overflow: auto; padding: 8px 10px; background: var(--bg, #0b0d12); border: 1px solid var(--line); font: 11.5px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+
+/* ---------- tile arrangement (dashboard) ---------- */
+.tile-slot { display: flex; flex-direction: column; min-width: 0; }
+.tile-slot > .panel { flex: 1; }
+.tile-slot.size-m { grid-column: span 2; }
+.tile-slot.size-l { grid-column: 1 / -1; }
+.tile-slot.dragging { opacity: 0.45; }
+@media (max-width: 1100px) { .tile-slot.size-m, .tile-slot.size-l { grid-column: auto; } }
+.tile-tools { display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; }
+.tile-tools button.ghost { padding: 0 5px; min-width: 0; line-height: 1.4; font-size: 11px; }
+.drag-handle { cursor: grab; padding: 0 4px; color: var(--dim); user-select: none; }
+.drag-handle:active { cursor: grabbing; }

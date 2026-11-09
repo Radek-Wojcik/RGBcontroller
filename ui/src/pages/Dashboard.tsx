@@ -1,4 +1,6 @@
+import { useState, type ReactNode } from "react";
 import { bridge } from "../bridge";
+import { moveTile, nextSize, orderTiles, useTileLayout, type TileSize } from "../tileLayout";
 import { findProfile, paletteCss, updateGroupEffect, updateProfile } from "../config";
 import { useStore, useThrottled } from "../store";
 import { GroupLeds, useDeviceColors } from "../DevicePreview";
@@ -13,26 +15,66 @@ const EFFECT_LABELS: Partial<Record<EffectKind, string>> = { ColorCycle: "Color 
 /** Effects whose speed, scale or angle mean something (Static and Off ignore them). */
 const ANIMATED = new Set<EffectKind>(["Breathing", "Wave", "Radial", "Mirror", "ColorCycle", "Aurora"]);
 
+const AMBILIGHT_ID = "ambilight";
+
 export function Dashboard() {
   const { state, snapshot, devices } = useStore();
   const deviceColors = useDeviceColors();
+  const [layout, updateLayout, resetLayout] = useTileLayout();
+  const [dragging, setDragging] = useState<string | null>(null);
   if (!state || !snapshot) return <Empty>Waiting for the Service...</Empty>;
   const config = snapshot.config;
   const profile = findProfile(config, state.activeProfile);
   if (!profile) return <Empty>The active profile {state.activeProfile} is missing from the config.</Empty>;
 
+  const ids = [AMBILIGHT_ID, ...config.lighting.groups.map(g => `group:${g.name}`)];
+  const order = orderTiles(ids, layout.order);
+  const sizeOf = (id: string): TileSize => layout.sizes[id] ?? (id === AMBILIGHT_ID ? "l" : "s");
+  const move = (id: string, to: number) => updateLayout(l => ({ ...l, order: moveTile(orderTiles(ids, l.order), orderTiles(ids, l.order).indexOf(id), to) }));
+  const tools = (id: string) => (
+    <span className="tile-tools">
+      <button className="ghost" aria-label="Move earlier" title="Move earlier" disabled={order.indexOf(id) === 0}
+        onClick={() => move(id, order.indexOf(id) - 1)}>◀</button>
+      <button className="ghost" aria-label="Move later" title="Move later" disabled={order.indexOf(id) === order.length - 1}
+        onClick={() => move(id, order.indexOf(id) + 1)}>▶</button>
+      <button className="ghost" aria-label="Change size" title="Size: small, wide, full row"
+        onClick={() => updateLayout(l => ({ ...l, sizes: { ...l.sizes, [id]: nextSize(sizeOf(id)) } }))}>{{ s: "▫", m: "▭", l: "▬" }[sizeOf(id)]}</button>
+      <span className="drag-handle" role="img" aria-label="Drag to move" title="Drag to move" draggable
+        onDragStart={e => { e.dataTransfer.setData("text/plain", id); e.dataTransfer.effectAllowed = "move"; setDragging(id); }}
+        onDragEnd={() => setDragging(null)}>⠿</span>
+    </span>
+  );
+
   return (
-    <div className="tiles">
-      <AmbilightTile config={config} />
-      {config.lighting.groups.map(group => (
-        <GroupTile key={group.name} config={config} group={group} effect={profile.groups.find(g => g.group === group.name)}
-          profile={profile.name} devices={devices} colors={deviceColors} />
-      ))}
-    </div>
+    <>
+      <div className="tiles">
+        {order.map(id => (
+          <div key={id} className={`tile-slot size-${sizeOf(id)} ${dragging === id ? "dragging" : ""}`}
+            onDragOver={e => { if (dragging && dragging !== id) e.preventDefault(); }}
+            onDrop={e => {
+              e.preventDefault();
+              const from = e.dataTransfer.getData("text/plain");
+              if (from && from !== id) move(from, order.indexOf(id));
+              setDragging(null);
+            }}>
+            {id === AMBILIGHT_ID
+              ? <AmbilightTile config={config} tools={tools(id)} />
+              : (() => {
+                const group = config.lighting.groups.find(g => `group:${g.name}` === id)!;
+                return <GroupTile config={config} group={group} effect={profile.groups.find(g => g.group === group.name)}
+                  profile={profile.name} devices={devices} colors={deviceColors} tools={tools(id)} />;
+              })()}
+          </div>
+        ))}
+      </div>
+      {(layout.order.length > 0 || Object.keys(layout.sizes).length > 0) && (
+        <div className="row buttons"><button className="ghost" onClick={resetLayout}>Reset tile arrangement</button></div>
+      )}
+    </>
   );
 }
 
-function AmbilightTile({ config }: { config: AppConfig }) {
+function AmbilightTile({ config, tools }: { config: AppConfig; tools?: ReactNode }) {
   const { state, run, editConfig } = useStore();
   const profile = findProfile(config, state!.activeProfile)!;
   const a = profile.ambilight;
@@ -42,7 +84,7 @@ function AmbilightTile({ config }: { config: AppConfig }) {
     editConfig(c => updateProfile(c, profile.name, p => ({ ...p, ambilight: { ...p.ambilight, solidColor: color.toUpperCase() } }))), 300);
 
   return (
-    <Panel wide tall title="Ambilight" meta={<span className="num">{config.strip.ledCount} LED · {state!.captureWanted ? "capturing" : "idle"}</span>}>
+    <Panel wide tall title="Ambilight" tools={tools} meta={<span className="num">{config.strip.ledCount} LED · {state!.captureWanted ? "capturing" : "idle"}</span>}>
       <div className="ambilight">
         <StripView layout={config.strip.layout} ledCount={config.strip.ledCount} mode={state!.allOff ? "Off" : a.mode}
           solidColor={a.solidColor} brightness={state!.stripBrightnessPercent} speed={a.speed} live={live} />
@@ -66,9 +108,9 @@ function AmbilightTile({ config }: { config: AppConfig }) {
   );
 }
 
-function GroupTile({ config, group, effect, profile, devices, colors }: {
+function GroupTile({ config, group, effect, profile, devices, colors, tools }: {
   config: AppConfig; group: GroupConfig; effect: GroupEffectConfig | undefined; profile: string; devices: DeviceList | null;
-  colors: Map<number, Uint8Array>;
+  colors: Map<number, Uint8Array>; tools?: ReactNode;
 }) {
   const { run, editConfig } = useStore();
   const tune = useThrottled((change: { speed?: number; scale?: number; brightnessPercent?: number; maxFps?: number }) =>
@@ -88,7 +130,7 @@ function GroupTile({ config, group, effect, profile, devices, colors }: {
   const flow = effect && ANIMATED.has(kind) && effect.speed > 0 ? `${Math.min(30, Math.max(1.2, 1 / effect.speed)).toFixed(2)}s` : undefined;
 
   return (
-    <Panel title={group.name} meta={<span className="num">{leds || "?"} LED · {group.maxFps} fps</span>} className={kind === "Off" ? "is-off" : ""}>
+    <Panel title={group.name} tools={tools} meta={<span className="num">{leds || "?"} LED · {group.maxFps} fps</span>} className={kind === "Off" ? "is-off" : ""}>
       <div className="swatch" style={{ background: kind === "Off" ? undefined : swatch, animationDuration: flow }} data-flow={flow ? "on" : "off"}
         aria-hidden />
       <GroupLeds config={config} group={group} devices={devices} colors={colors} />
