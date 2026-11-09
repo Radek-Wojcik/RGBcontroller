@@ -1,9 +1,9 @@
 # RGBcontroller: project state and handoff
 
 Last updated: 2026-11-09. Stage 4 passed; stage 5 in progress on branch `stage-5-ui` (Service with IPC 1.8 installed). **Read this file right after
-`SPEC.md` and `CLAUDE.md` when you start a new session.** It records everything that was built, decided and learned
+`docs/SPECIFICATION.md` and `CLAUDE.md` when you start a new session.** It records everything that was built, decided and learned
 in stages 0-4, the exact state of
-the owner's PC, and what to do next. `SPEC.md` stays the source of truth for requirements. This file is the source
+the owner's PC, and what to do next. `docs/SPECIFICATION.md` stays the source of truth for requirements. This file is the source
 of truth for **what exists now**.
 
 ---
@@ -165,7 +165,7 @@ These come from the owner during stages 0-3 and add to `CLAUDE.md`:
   - One branch per stage (`stage-N-...`), merged to `main` with `--no-ff` after the gate.
   - Each passed gate gets an annotated tag (`v0.N.0-stageN`), and the result is pushed.
   - Refresh the README through the `anthropic-skills:publikowanie-projektow-github` skill: show the README, wait for "zatwierdzam", then push a `docs/readme-refresh` branch, open a PR and merge it.
-- **Do not add features that are not in `SPEC.md` without asking.**
+- **Do not add features that are not in `docs/SPECIFICATION.md` without asking.**
 - **Owner's stage 2 wishes:**
   - RAM must run the mirror effect, not hardware mode, with a tunable FPS.
   - The UI (stage 5) must expose speed, wave length (scale) and FPS per group. SPEC 7.3 covers this; the backend is
@@ -556,7 +556,7 @@ See section 0 (2026-11-08) for the current list. Stage 4 is closed; the remainin
 You are continuing RGBcontroller (Windows RGB + Adalight controller) for the owner Radek. Talk to the owner in
 Polish; code, comments, commits and docs are in English.
 
-Read, in this order: SPEC.md, CLAUDE.md, docs/HANDOFF.md (section 0 first), docs/spikes/stage5-ui-plan.md, then the
+Read, in this order: docs/SPECIFICATION.md, CLAUDE.md, docs/HANDOFF.md (section 0 first), docs/spikes/stage5-ui-plan.md, then the
 other docs/spikes/*.md as needed. HANDOFF.md describes exactly what exists, the owner's PC state, binding preferences
 (commits authored only by the owner with the noreply address, no Co-Authored-By/Claude attribution anywhere),
 decisions and open items. Stages 0-4 have passed. Stage 5 (UI) is in progress on branch stage-5-ui; the mapping

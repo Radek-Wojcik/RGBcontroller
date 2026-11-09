@@ -1,6 +1,6 @@
 # Stage 4 spikes: Agent, screen capture (R7)
 
-Date: 2026-11-01. Machine: the owner's PC (SPEC section 2), AOC AG326UD at 3840x2160, SDR desktop.
+Date: 2026-11-01. Machine: the author's PC (SPEC section 2), AOC AG326UD at 3840x2160, SDR desktop.
 
 ## R7: DXGI Desktop Duplication
 
@@ -43,7 +43,7 @@ frame with every LED's sampled band outlined).
 | 3 | Smoothness, letterbox | Smooth transitions passed. Letterbox needed three fixes: bars with subtitles, logos or player controls (75% black rule), and thin full-width lines across a bar such as a progress bar (the picture starts after 3% of non-bar rows). |
 | 4 | CPU, colorful fullscreen video, 60 s, `tools\Measure-RGBcontroller.ps1` | Agent 0.022%, Service 0.012%, UI (open) 0.026%; OpenRGB 1.716% is the RAM at 10 FPS as before. The ambilight costs about 0.03% of the whole CPU (target below 1%). |
 | 5 | Game | Passed (borderless) |
-| 6 | HDR | Skipped by the owner (does not use HDR now) |
+| 6 | HDR | Skipped by the author (does not use HDR now) |
 | 7 | Hotkeys and tray | Passed (after the on-screen note was added) |
 | 8 | Sleep and wake | Passed; the strip goes black before sleep and shutdown since the black frames are drained |
 | 9 | Win+L | Passed: the strip shows the lock fallback |
