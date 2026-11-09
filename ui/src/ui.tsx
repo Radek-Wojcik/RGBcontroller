@@ -2,16 +2,17 @@ import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "
 
 // Small controls shared by the pages. Visuals live in styles.css.
 
-export function Panel({ title, meta, wide, tall, children, className = "" }: {
-  title?: ReactNode; meta?: ReactNode; wide?: boolean; tall?: boolean; children: ReactNode; className?: string;
+export function Panel({ title, meta, tools, wide, tall, children, className = "" }: {
+  title?: ReactNode; meta?: ReactNode; tools?: ReactNode; wide?: boolean; tall?: boolean; children: ReactNode; className?: string;
 }) {
   return (
     <section className={`panel ${wide ? "wide" : ""} ${tall ? "tall" : ""} ${className}`}>
       <div className="panel-body">
-        {(title || meta) && (
+        {(title || meta || tools) && (
           <header className="panel-head">
             <h2>{title}</h2>
             {meta && <span className="panel-meta">{meta}</span>}
+            {tools}
           </header>
         )}
         {children}
