@@ -2,11 +2,11 @@
 
 Windows controller for PC RGB lighting and an Adalight ambilight strip: synchronized effects on every OpenRGB device, a screen-mirroring strip behind the monitor, and a background service that replaces OpenRGB's Effects plugin (about 2.6% CPU).
 
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![React 19](https://img.shields.io/badge/UI-React_19_%2B_WebView2-149ECA) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Status: stage 5 of 6](https://img.shields.io/badge/status-stage_5_of_6-orange) [![CI](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml/badge.svg)](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![Platform: Windows](https://img.shields.io/badge/platform-Windows_10_%7C_11-0078D4) ![React 19](https://img.shields.io/badge/UI-React_19_%2B_WebView2-149ECA) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Status: stage 6 of 6](https://img.shields.io/badge/status-stage_6_of_6-orange) [![CI](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml/badge.svg)](https://github.com/Radek-Wojcik/RGBcontroller/actions/workflows/ci.yml)
 
 <img src="docs/assets/ui-dashboard.png" alt="Dashboard: the ambilight tile draws the strip's 133 LEDs around the monitor in their live colors; tiles for pump and fans, motherboard, RAM, keyboard, mouse and GPU set effect, palette, speed, wave length, brightness and frame rate" width="900">
 
-> **Status: stage 5 of 6.** The Service, the tray Agent with screen ambilight and hotkeys, and the UI run on the author's PC. The installer (stage 6) is not built yet: installation is a developer install from source, and the default device mapping is the author's hardware (see [Hardware configuration](#hardware-configuration)).
+> **Status: stage 6 of 6, in progress.** The Service, the tray Agent with screen ambilight and hotkeys, and the UI (with the mapping and strip layout wizards, palette editor and profile management) run on the author's PC. The installer script and its checks are written but not yet tested on a clean install; until then installation is a developer install from source, and the default device mapping is the author's hardware (see [Hardware configuration](#hardware-configuration)). Design notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Key features
 
@@ -88,6 +88,16 @@ Undo everything and restore the previous OpenRGB autostart (`-RemoveData` also d
 .\uninstall-dev.ps1
 ```
 
+### Building the installer
+
+With [Inno Setup 6](https://jrsoftware.org/isdl.php) installed, this publishes the app and builds `installer\Output\RGBcontroller-Setup-<version>.exe` (git-ignored; nothing is installed on the build PC):
+
+```powershell
+.\installer\Build-Installer.ps1
+```
+
+The setup checks that the PawnIO driver and the WebView2 runtime are present, and lists any OpenRGB or AmbiBox autostart entries (scheduled task, Run key, Startup folder). It turns those off only if you agree, never deletes them, and the uninstaller turns them back on. Silent installs leave them alone unless started with `/DisableConflicts=1`. `tools\Test-InstallPreflight.ps1` tests that logic on scratch locations.
+
 ## Usage
 
 ### Tray icon and hotkeys
@@ -108,22 +118,23 @@ Open it from the tray, the Desktop shortcut or the Start menu. Closing the windo
 
 | Page | What it does |
 |---|---|
-| Dashboard | Live strip preview, strip mode, brightness and solid color; one tile per device group (pump and fans, motherboard, RAM, keyboard, mouse, GPU) drawn like the hardware (keys, rings, sticks) in the colors it shows right now, with effect, palette, speed, wave length, brightness and frame rate cap |
+| Dashboard | Live strip preview, strip mode, brightness and solid color; one tile per device group (pump and fans, motherboard, RAM, keyboard, mouse, GPU) drawn like the hardware (keys, rings, sticks) in the colors it shows right now, with effect, palette, speed, wave length, brightness and frame rate cap. Tiles can be dragged (or moved with the arrow buttons) and set to small, wide or full-row size |
 | Devices | OpenRGB devices, zones, LED counts and the group that drives each zone; the mapping wizard describes what is plugged into each motherboard RGB header (pump ring, fan rings, strips) |
-| Ambilight | Strip layout, test pattern, response (attack, release, fade-in) and picture settings (edge depth, black threshold, gamma, saturation, letterbox detection) |
-| Profiles | Activate a profile, master brightness, choose the logon-screen and lock profiles |
+| Ambilight | Strip layout with a three-step wizard, test pattern, response (attack, release, fade-in) and picture settings (edge depth, black threshold, gamma, saturation, letterbox detection) |
+| Profiles | Activate, duplicate, rename, delete, export and import profiles; master brightness; choose the logon-screen and lock profiles; the palette editor (colors and positions of each palette, renaming follows into every profile) |
 | Hotkeys | Record combinations and assign actions |
-| Settings | Devices turned off when the display goes off (unlocked and locked), strip port, LED count and current limit, diagnostics, accent color |
+| Settings | Devices turned off when the display goes off (unlocked and locked), strip port, LED count and current limit, diagnostics (rescan devices, reconnect the strip, restart OpenRGB, Service log), accent color |
 
 <img src="docs/assets/ui-profiles.png" alt="Profiles page: Rainbow, Cyberpunk, Aurora, Night, Solid White and Logon cards with palette stripes, effects per group, master brightness and buttons to activate or use on the logon screen or when locked" width="900">
 
 ### Setting up the strip
 
 1. Settings: set the LED count of your strip (applies after a Service restart).
-2. Ambilight: click **Show test pattern**. The first 3 LEDs light green, the last 3 red and every 10th white.
-3. Set the number of LEDs on each edge and the direction the strip runs, viewed from the front.
-4. Click the outline where the first LED (the cable end) sits; the ringed LED moves there.
-5. LEDs hidden behind the monitor stand go into **LEDs kept dark** (LED numbers, 0 = first LED).
+2. Ambilight: click **Start the layout wizard**. The drawn strip always shows the colors the Service really lights; each step is done when the drawing matches your strip.
+3. Step 1: press **Light the first 3 LEDs** and click the outline where they are (the cable end of the strip); the ringed LED moves there.
+4. Step 2: press **Light LEDs 1 to 20** and set the direction the strip runs, viewed from the front.
+5. Step 3: set the number of LEDs on each edge; **Light top / right / bottom / left** lights the LEDs the app assigns to that edge.
+6. LEDs hidden behind the monitor stand go into **LEDs kept dark** (LED numbers, 0 = first LED). **Show test pattern** (first 3 green, last 3 red, every 10th white) is still there for a quick look.
 
 ### Command line
 
@@ -207,8 +218,8 @@ Each stage ends with a hardware test gate on the target PC.
 2. ~~**Effect engine**~~ Done (`v0.2.0-stage2`).
 3. ~~**Power and session handling**~~ Done (`v0.3.0-stage3`).
 4. **Agent and ambilight**: built; hardware gate in progress.
-5. **UI**: live previews of every device and the device mapping wizard are done; the strip layout wizard, palette editor, profile management and diagnostics page are next.
-6. **Installer and hardening**.
+5. ~~**UI**~~ Built: live previews, both wizards, palette editor, profile management, diagnostics and tile arrangement; hardware gate pending.
+6. **Installer and hardening**: the Inno Setup script (`installer/`), the preflight checks and this architecture write-up are in; a clean install and uninstall on the target PC is the gate.
 
 ## Contributing
 
