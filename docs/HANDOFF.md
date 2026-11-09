@@ -15,10 +15,10 @@ of truth for **what exists now**.
   Ambilight CPU measured on 2026-11-05 with `tools\Measure-RGBcontroller.ps1` for 60 s on a colorful fullscreen
   film: Agent 0.022%, Service 0.012%, UI (open) 0.026%, OpenRGB 1.7% (RAM at 10 FPS, as before).
 - Stage 5 is in progress (see the table in section 1 and `docs/spikes/stage5-ui-plan.md`).
-- The repository is **public** (MIT). `main` has PR #3 to #6 merged. Seven commits are on `stage-5-ui` only:
+- The repository is **public** (MIT). `main` has PR #3 to #6 merged. Commits on `stage-5-ui` only (not in `main`):
   `c63747f` (letterbox thin-line fix), `ccfa0f2` (version 0.4.0 and the stage 4 gate report), `f75deff` (IPC 1.7),
   `c312f5f` (device previews), `561169e` and `a89c519` (docs), `eb0970a` (IPC 1.8 Identify), `bb960f5` (mapping
-  wizard). The last two are **local, not pushed**. A PR into `main` still needs the owner's explicit OK; the tag
+  wizard). `eb0970a`, `bb960f5` and this handoff commit are **local, not pushed**. A PR into `main` still needs the owner's explicit OK; the tag
   `v0.4.0-stage4` goes on the merge commit.
 - The owner's PC runs the build from `bb960f5`, installed on 2026-11-09 with `install-dev.ps1` (`--status` reports
   `0.4.0 (IPC 1.8)`; the assembly version was not bumped). The strip (LED BOX on COM7, 133 LEDs) and all 5 OpenRGB
