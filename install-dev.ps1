@@ -34,10 +34,6 @@ $agentRunValue = 'RGBcontroller.Agent'
 function Step($text) { Write-Host "==> $text" -ForegroundColor Cyan }
 
 # --- prerequisites -------------------------------------------------------------------------
-if (-not (Test-Path (Join-Path $root 'third_party\openrgb\OpenRGB.exe'))) {
-    Step 'Copying the pinned OpenRGB build'
-    & (Join-Path $root 'tools\Get-PinnedOpenRgb.ps1')
-}
 if (-not (Get-CimInstance Win32_SystemDriver -Filter "Name='PawnIO'")) {
     Write-Warning 'PawnIO driver not found: RAM, motherboard SMBus and GPU I2C devices will not be detected.'
 }
@@ -46,19 +42,8 @@ if (Get-Process AmbiBox -ErrorAction SilentlyContinue) {
 }
 
 # --- 1. publish ----------------------------------------------------------------------------
-& (Join-Path $root 'tools\Build-Frontend.ps1')
-$dotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'
-if (-not (Test-Path $dotnet)) { $dotnet = 'dotnet' }
 $publishDir = Join-Path $root 'artifacts\publish\app'
-if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
-# Both executables share one self-contained folder; their common libraries have the same (central) versions.
-foreach ($project in 'RGBcontroller.Service', 'RGBcontroller.Agent', 'RGBcontroller.UI') {
-    Step "Publishing $project (Release, win-x64, self-contained, ReadyToRun)"
-    & $dotnet publish (Join-Path $root "src\$project\$project.csproj") `
-        -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o $publishDir --nologo --disable-build-servers
-    if ($LASTEXITCODE -ne 0) { throw "dotnet publish of $project failed ($LASTEXITCODE)." }
-}
-if (-not (Test-Path (Join-Path $publishDir 'openrgb\OpenRGB.exe'))) { throw 'Published output is missing openrgb\OpenRGB.exe.' }
+& (Join-Path $root 'tools\Publish-App.ps1') -OutputDir $publishDir
 
 # --- 2. data folder and existing OpenRGB autostart -------------------------------------------
 # Only the Service (SYSTEM) and administrators write config; users may read config and logs.

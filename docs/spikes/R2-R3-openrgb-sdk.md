@@ -6,7 +6,7 @@ Date: 2026-10-30. Stage 0. Method: source review of OpenRGB at the pinned commit
 `Documentation/OpenRGBSDK.md`) and of OpenRGB.NET 3.1.1 (GitHub `diogotr7/OpenRGB.NET`, NuGet).
 Then an own client was written and tested against an in-process fake server that follows that source.
 
-**Not yet verified on the live server.** The owner's running OpenRGB (Session 0, with the Effects plugin) has no
+**Not yet verified on the live server.** The author's running OpenRGB (Session 0, with the Effects plugin) has no
 SDK server open (port 6742 closed), and a second OpenRGB instance must never be started. The live check is the
 first step of stage 1, against the instance the Service supervises (see "Open for stage 1").
 
@@ -39,7 +39,7 @@ first step of stage 1, against the instance the Service supervises (see "Open fo
    `--server-host 127.0.0.1 --server-port 6742` (both imply `--server`).
 2. **No plugin-disable switch exists in 1.0rc2's CLI.** The "no Effects plugin" guarantee therefore relies on
    the pinned copy in `{app}\openrgb\` having no `plugins\` folder plus the isolated `--config` folder. Stage 1
-   must confirm in the OpenRGB log that no plugin is loaded (the owner's plugin lives in
+   must confirm in the OpenRGB log that no plugin is loaded (the author's plugin lives in
    `C:\Program Files\OpenRGB\plugins\`, which our copy never uses).
 3. Other flags confirmed in `cli.cpp`: `--noautoconnect`, `--nodetect`, `--config <path>`, `--localconfig`,
    `--gui`, `--startminimized`, `--loglevel`. Whether a CLI start without `--gui` stays headless is verified in stage 1.
@@ -58,7 +58,7 @@ segments, flags, alt names), truncated or padded or wrong-version data rejected,
 field, **zero allocations per `UpdateLeds` after warm-up**, rescan with three `DEVICE_LIST_UPDATED` notices, a
 hung server timing out instead of hanging, and a dropped connection raising `Disconnected`.
 
-## Live verification (stage 1, 2026-10-30, owner's PC)
+## Live verification (stage 1, 2026-10-30, author's PC)
 
 Done against the supervised OpenRGB 1.0rc2 (running as LocalSystem) with `RGBcontroller.Service.exe --probe [--rescan]`:
 

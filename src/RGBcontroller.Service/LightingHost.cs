@@ -45,6 +45,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     private FrameServer? _frames;
     private Timer? _deferredSave;
     private Timer? _stripTestEnd;
+    private Timer? _identifyEnd;
     private bool _savePending;
     private bool _allOff;
     private bool _screenLive;
@@ -118,6 +119,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
 
         _deferredSave = new Timer(_ => SaveDeferred());
         _stripTestEnd = new Timer(_ => ShowStripTest(TimeSpan.Zero));
+        _identifyEnd = new Timer(_ => Identify(new IdentifyRequest(0, null, 0, 1, 0), TimeSpan.Zero));
         _control = new ControlServer(IpcProtocol.ControlPipeName, subscription => new ServiceControlEndpoint(this, subscription), _log);
         StateChanged += _control.Broadcast;
         _control.Start();
@@ -185,6 +187,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
 
         _deferredSave?.Dispose();
         _stripTestEnd?.Dispose();
+        _identifyEnd?.Dispose();
         SaveDeferred();
 
         _log.Information("Lighting host stopped");
@@ -277,6 +280,11 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
                 _lighting?.SetStripLayout(new StripLayout(config.Strip.Layout, current.Strip.LedCount));
             }
 
+            if (!config.OpenRgb.ZoneSizes.SequenceEqual(current.OpenRgb.ZoneSizes))
+            {
+                Supervisor?.UpdateZoneSizes(config.OpenRgb.ZoneSizes);
+            }
+
             if (config != current)
             {
                 Commit(config);
@@ -302,7 +310,7 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     /// <summary>Changes the running Service cannot apply: strip hardware (layout aside), OpenRGB and logging.</summary>
     internal static bool NeedsRestart(AppConfig current, AppConfig next) =>
         next.Strip with { Layout = current.Strip.Layout } != current.Strip
-        || next.OpenRgb != current.OpenRgb
+        || next.OpenRgb with { ZoneSizes = current.OpenRgb.ZoneSizes } != current.OpenRgb
         || next.Logging != current.Logging;
 
     public string? ReopenStrip()
@@ -317,6 +325,59 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         return null;
     }
 
+    public string? RestartOpenRgb()
+    {
+        if (Supervisor is null)
+        {
+            return "OpenRGB is not managed by the Service right now.";
+        }
+
+        _log.Information("OpenRGB restart requested by a client");
+        Supervisor.RequestRestart();
+        return null;
+    }
+
+    public string? RescanDevices()
+    {
+        if (Supervisor is null)
+        {
+            return "OpenRGB is not managed by the Service right now.";
+        }
+
+        _log.Information("Device rescan requested by a client");
+        Supervisor.RequestRescan();
+        return null;
+    }
+
+    public LogTail GetLogTail(string component, int lines) => LogTailReader.Read(_paths.LogDirectory, component, lines);
+
+    public string? Identify(IdentifyRequest request, TimeSpan duration)
+    {
+        if (_lighting is null)
+        {
+            return "The lighting engine is not running.";
+        }
+
+        if (duration <= TimeSpan.Zero)
+        {
+            _identifyEnd?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _lighting.SetIdentify(null);
+            _log.Information("Identify ended");
+            return null;
+        }
+
+        var error = _lighting.SetIdentify(new IdentifyTarget(request.DeviceIndex, request.Zone, request.Start, request.Count));
+        if (error is not null)
+        {
+            return error;
+        }
+
+        _identifyEnd?.Change(duration, Timeout.InfiniteTimeSpan);
+        _log.Information("Identify device {Device} zone {Zone} LEDs {Start}+{Count} for {Seconds} s",
+            request.DeviceIndex, request.Zone ?? "(all)", request.Start, request.Count, duration.TotalSeconds);
+        return null;
+    }
+
     public IReadOnlyList<DeviceColors> GetDeviceColors() => _lighting?.DeviceSnapshot() ?? [];
 
     public StripColors GetStripColors() => new(_lighting?.StripSnapshot() ?? []);
@@ -325,7 +386,8 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
     {
         var devices = _lighting?.Devices ?? [];
         var list = devices.Select((d, i) => new DeviceInfo(i, d.Name, d.Type,
-            [.. d.Zones.Select(z => new ZoneInfo(z.Name, z.Type, (int)z.LedsCount, z.LedsMin != z.LedsMax, (int)z.MatrixWidth, (int)z.MatrixHeight))])).ToList();
+            [.. d.Zones.Select(z => new ZoneInfo(z.Name, z.Type, (int)z.LedsCount, z.LedsMin != z.LedsMax, (int)z.MatrixWidth, (int)z.MatrixHeight,
+                z.Matrix.Count == 0 ? null : [.. z.Matrix.Select(m => m == uint.MaxValue ? -1 : (int)m)]))])).ToList();
         return new DeviceList(list, CurrentConfig.Strip.Enabled ? CurrentConfig.Strip.LedCount : 0);
     }
 
@@ -483,6 +545,19 @@ internal sealed class LightingHost : IControllableHost, IScreenFeedSink, IAsyncD
         _lighting?.SetStripTest(on);
         _stripTestEnd?.Change(on ? duration : Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _log.Information(on ? "Strip test pattern for {Seconds} s" : "Strip test pattern ended", duration.TotalSeconds);
+    }
+
+    public void ShowStripMarker(int start, int count, TimeSpan duration)
+    {
+        if (duration <= TimeSpan.Zero)
+        {
+            ShowStripTest(TimeSpan.Zero);
+            return;
+        }
+
+        _lighting?.SetStripMarker(start, count);
+        _stripTestEnd?.Change(duration, Timeout.InfiniteTimeSpan);
+        _log.Information("Strip marker LEDs {Start}+{Count} for {Seconds} s", start, count, duration.TotalSeconds);
     }
 
     public void OnScreenColors(ReadOnlySpan<RgbColor> colors)

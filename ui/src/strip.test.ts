@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeColors, nearestSlot, placeStrip } from "./strip";
+import { decodeColors, edgeRun, nearestCorner, nearestSlot, placeStrip } from "./strip";
 import { paletteCss, setTurnOff, updateGroupEffect } from "./config";
 import type { AppConfig, StripLayoutConfig } from "./types";
 import fixture from "./mock-config.json";
@@ -45,6 +45,29 @@ describe("first LED picking", () => {
 
   it("decodes the Service's base64 colors", () => {
     expect([...decodeColors(btoa(String.fromCharCode(255, 0, 128)))]).toEqual([255, 0, 128]);
+  });
+});
+
+describe("edgeRun", () => {
+  it("finds the LEDs of one edge", () => {
+    const l = layout({ top: 3, right: 2, bottom: 3, left: 2 });
+    expect(edgeRun(l, 10, "Top")).toEqual({ start: 0, count: 3 });
+    expect(edgeRun(l, 10, "Bottom")).toEqual({ start: 5, count: 3 });
+  });
+
+  it("takes the first of the longest runs when an edge wraps around the strip end", () => {
+    const l = layout({ top: 4, right: 2, bottom: 2, left: 2, offset: 2 });
+    expect(edgeRun(l, 10, "Top")).toEqual({ start: 0, count: 2 });
+    expect(edgeRun(l, 10, "Right")).toEqual({ start: 2, count: 2 });
+  });
+
+  it("returns null for an empty edge", () => {
+    expect(edgeRun(layout({ top: 0 }), 3, "Top")).toBeNull();
+  });
+
+  it("picks the corner of the clicked quarter", () => {
+    expect(nearestCorner(0.9, 0.1)).toBe("TopRight");
+    expect(nearestCorner(0.2, 0.8)).toBe("BottomLeft");
   });
 });
 

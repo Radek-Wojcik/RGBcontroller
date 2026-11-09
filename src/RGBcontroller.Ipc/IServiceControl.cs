@@ -43,6 +43,13 @@ public interface IServiceControl
     /// </summary>
     Task<CommandResult> ShowStripTestAsync(int seconds, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Lights only the strip LEDs <see cref="StripMarkerRequest.Start"/> .. + <see cref="StripMarkerRequest.Count"/> - 1 in
+    /// white for <see cref="StripMarkerRequest.Seconds"/>, 0 ends it (and the test pattern); for the strip layout wizard
+    /// (since 1.10).
+    /// </summary>
+    Task<CommandResult> ShowStripMarkerAsync(StripMarkerRequest request, CancellationToken cancellationToken);
+
     /// <summary>Moves the active profile by <paramref name="delta"/> places in config order, wrapping around (since 1.3).</summary>
     Task<CommandResult> StepProfileAsync(int delta, CancellationToken cancellationToken);
 
@@ -66,8 +73,27 @@ public interface IServiceControl
     /// <summary>The colors every OpenRGB device shows right now, for the UI's tile previews (since 1.7).</summary>
     Task<IReadOnlyList<DeviceColors>> GetDeviceColorsAsync(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Mapping wizard (SPEC 7.4): shows one LED range of one OpenRGB device (dim white, first LEDs green, last LEDs red)
+    /// and turns the other OpenRGB devices black for <see cref="IdentifyRequest.Seconds"/>; 0 ends it early. Not saved
+    /// (since 1.8).
+    /// </summary>
+    Task<CommandResult> IdentifyAsync(IdentifyRequest request, CancellationToken cancellationToken);
+
     /// <summary>Closes and reopens the strip's serial port (diagnostics when the LED box stops reacting) (since 1.6).</summary>
     Task<CommandResult> ReopenStripAsync(CancellationToken cancellationToken);
+
+    /// <summary>The last lines of the Service's newest log, for the diagnostics page (since 1.11).</summary>
+    Task<LogTail> GetLogTailAsync(LogTailRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stops the Service's own OpenRGB and starts it again at once, then lights every device (diagnostics when a device
+    /// stops reacting) (since 1.11).
+    /// </summary>
+    Task<CommandResult> RestartOpenRgbAsync(CancellationToken cancellationToken);
+
+    /// <summary>Asks the running OpenRGB to detect devices again and re-applies the lighting (since 1.11).</summary>
+    Task<CommandResult> RescanDevicesAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Notifications the Service sends to subscribed clients (JSON-RPC notifications, no reply).</summary>
@@ -161,6 +187,26 @@ public sealed record StripColors(byte[] Rgb);
 /// <param name="Rgb">R, G, B bytes per LED in the device's LED order, zones one after another.</param>
 public sealed record DeviceColors(int Index, byte[] Rgb);
 
+/// <param name="DeviceIndex">SDK device index (as in <see cref="DeviceInfo.Index"/>).</param>
+/// <param name="Zone">Zone name, or null to count <paramref name="Start"/> over the whole device.</param>
+/// <param name="Start">First LED of the range inside the zone, 0-based.</param>
+/// <param name="Count">LEDs in the range.</param>
+/// <param name="Seconds">How long the range stays lit (1-300); 0 returns to the profile.</param>
+/// <summary>Strip LEDs to light for the layout wizard; indices past the strip are ignored.</summary>
+/// <param name="Component">Only "service" for now: the Agent and UI log in the user profile, which the Service cannot read.</param>
+/// <param name="Lines">How many of the last lines to return, 1 to <see cref="LogTailRequest.MaxLines"/>.</param>
+public sealed record LogTailRequest(string Component, int Lines)
+{
+    public const int MaxLines = 500;
+}
+
+/// <param name="File">Name of the log file the lines come from; empty when there is none yet.</param>
+public sealed record LogTail(string File, string[] Lines);
+
+public sealed record StripMarkerRequest(int Start, int Count, int Seconds);
+
+public sealed record IdentifyRequest(int DeviceIndex, string? Zone, int Start, int Count, int Seconds);
+
 public sealed record DeviceList(IReadOnlyList<DeviceInfo> Devices, int StripLedCount);
 
 /// <param name="Index">SDK device index.</param>
@@ -169,4 +215,5 @@ public sealed record DeviceInfo(int Index, string Name, int Type, IReadOnlyList<
 
 /// <param name="Type">OpenRGB zone type: 0 single, 1 linear, 2 matrix.</param>
 /// <param name="Resizable">True for addressable headers whose LED count is set in openRgb.zoneSizes.</param>
-public sealed record ZoneInfo(string Name, int Type, int LedCount, bool Resizable, int MatrixWidth, int MatrixHeight);
+/// <param name="Matrix">Matrix zones only (since 1.9): the zone-relative LED index at each grid cell, row by row, -1 for a gap.</param>
+public sealed record ZoneInfo(string Name, int Type, int LedCount, bool Resizable, int MatrixWidth, int MatrixHeight, IReadOnlyList<int>? Matrix = null);
