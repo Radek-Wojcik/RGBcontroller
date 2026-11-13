@@ -33,6 +33,11 @@ internal sealed record CaptureStats(long Frames, long Sent, long Lost, string? M
 internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
 {
     private const uint IdleWaitMilliseconds = 200;
+
+    /// <summary>No step of the loop takes anywhere near this long (idle waits are 200 ms, the GPU wait is capped at 1 s).</summary>
+    public static readonly TimeSpan StallLimit = TimeSpan.FromSeconds(20);
+
+    private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan[] Backoff = [TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)];
 
     private readonly ScreenCaptureConfig _config;
@@ -40,6 +45,10 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
     private readonly IStripFrameSink _output;
     private readonly ILogger _log;
     private readonly ManualResetEvent _stop = new(false);
+
+    /// <summary>The thread beats at every step; the Agent's watchdog restarts the Agent when the beats stop (a hang inside the driver).</summary>
+    public StallWatchdog Watchdog { get; } = new(StallLimit);
+
     private readonly Stopwatch _clock = new();
     private Thread? _thread;
     private AmbilightPipeline? _pipeline;
@@ -48,6 +57,9 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
     private long _frames;
     private long _sent;
     private long _lost;
+    private int _reportedMapTimeouts;
+    private long _lastMapTimeoutReport;
+    private bool _abandoned;
     private double _screenWidthCm;
 
     public ScreenCaptureLoop(ScreenCaptureConfig config, StripLayoutConfig layout, int ledCount, IStripFrameSink output, ILogger log)
@@ -92,14 +104,27 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
         }
 
         _stop.Set();
-        _thread.Join();
+        if (!_thread.Join(StopTimeout))
+        {
+            // Stuck inside a driver call: do not freeze the caller (the tray's message loop) with it. The thread is a
+            // background thread and ends with the process; the watchdog restarts the Agent if it never returns.
+            _abandoned = true;
+            _log.Error("The screen capture thread did not stop within {Seconds} s (last step: {Stage}); abandoning it",
+                StopTimeout.TotalSeconds, StageNow);
+        }
+
         _thread = null;
     }
+
+    private string StageNow => Watchdog.Stage;
 
     public void Dispose()
     {
         Stop();
-        _stop.Dispose();
+        if (!_abandoned)
+        {
+            _stop.Dispose();
+        }
     }
 
     void IScreenImageSink.OnImage(in ScreenImage image) => _pipeline!.OnImage(image, _now);
@@ -123,8 +148,10 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
             while (!_stop.WaitOne(0))
             {
                 _now = _clock.Elapsed;
+                Watchdog.Beat("loop");
                 if (_duplicator is null)
                 {
+                    Watchdog.Beat("open duplication");
                     if (TryOpen())
                     {
                         failures = 0;
@@ -139,6 +166,7 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
                             _log.Information("Screen capture unavailable; the Service shows the fallback");
                         }
 
+                        Watchdog.Beat("back-off wait");
                         timer.Arm(Backoff[Math.Min(failures++, Backoff.Length - 1)]);
                         WaitHandle.WaitAny(waits);
                         continue;
@@ -148,7 +176,10 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
                 if (_now >= nextCapture)
                 {
                     var settled = _pipeline!.IsSettled;
+                    Watchdog.Beat("capture (acquire, copy, map)");
                     var outcome = Capture(settled ? IdleWaitMilliseconds : 0);
+                    Watchdog.Beat("after capture");
+                    ReportMapTimeouts();
                     _now = _clock.Elapsed;
                     if (outcome == CaptureOutcome.Lost)
                     {
@@ -177,6 +208,7 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
                 {
                     if (_now < nextCapture)
                     {
+                        Watchdog.Beat("idle wait");
                         timer.Arm(nextCapture - _now);
                         WaitHandle.WaitAny(waits);
                     }
@@ -186,6 +218,7 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
 
                 if (_now >= nextStep)
                 {
+                    Watchdog.Beat("step and send colors");
                     if (_pipeline.Step(_now - lastStep))
                     {
                         _output.SendColors(_pipeline.Output);
@@ -199,6 +232,7 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
                 var due = _pipeline.IsSettled || nextCapture < nextStep ? nextCapture : nextStep;
                 if (due > _now)
                 {
+                    Watchdog.Beat("pace wait");
                     timer.Arm(due - _now);
                     WaitHandle.WaitAny(waits);
                 }
@@ -215,6 +249,20 @@ internal sealed class ScreenCaptureLoop : IScreenImageSink, IDisposable
             _duplicator = null;
             _log.Information("Screen capture stopped: {Frames} frames, {Sent} sent, {Lost} losses", _frames, _sent, _lost);
         }
+    }
+
+    /// <summary>Logs frames skipped because the GPU was too slow, at most every 10 s.</summary>
+    private void ReportMapTimeouts()
+    {
+        var timeouts = _duplicator?.MapTimeouts ?? _reportedMapTimeouts;
+        if (timeouts <= _reportedMapTimeouts || _clock.ElapsedMilliseconds - _lastMapTimeoutReport < 10_000)
+        {
+            return;
+        }
+
+        _log.Warning("The GPU did not finish the screen copy in time for {Count} frame(s); they were skipped", timeouts - _reportedMapTimeouts);
+        _reportedMapTimeouts = timeouts;
+        _lastMapTimeoutReport = _clock.ElapsedMilliseconds;
     }
 
     private CaptureOutcome Capture(uint timeoutMilliseconds)

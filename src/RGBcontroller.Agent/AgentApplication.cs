@@ -40,9 +40,12 @@ internal sealed class AgentApplication : ApplicationContext
     private long _osdUntil;
     private bool _disposed;
 
-    public AgentApplication(ILogger log)
+    private readonly CaptureWatchdog _watchdog;
+
+    public AgentApplication(ILogger log, int restartsSoFar = 0)
     {
         _log = log.ForContext<AgentApplication>();
+        _watchdog = new CaptureWatchdog(() => _capture, log, restartsSoFar, () => (log as IDisposable)?.Dispose());
         _service = new ServiceConnection(SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext(), log);
         _service.StateChanged += OnStateChanged;
         _service.SettingsChanged += OnSettingsChanged;
@@ -66,6 +69,7 @@ internal sealed class AgentApplication : ApplicationContext
             _menu?.Dispose();
             _osd?.Dispose();
             _hotkeys.Dispose();
+            _watchdog.Dispose();
             _brightnessThrottle.Dispose();
             _service.Dispose();
             foreach (var icon in _icons.Values)
