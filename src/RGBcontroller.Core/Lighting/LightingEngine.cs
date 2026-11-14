@@ -360,6 +360,29 @@ public sealed class LightingEngine
         }
     }
 
+    /// <summary>OpenRGB device type number of DRAM.</summary>
+    private const int DramDeviceType = 1;
+
+    /// <summary>
+    /// Pushes the mode and the frame again to every DRAM device only. A RAM stick can lose its Direct mode on the SMBus
+    /// at any time (a second bus master, a rescan racing a write) and then ignores every color while the others keep
+    /// animating; no read-back tells us, so this is repeated on a timer and the freeze lasts at most one interval.
+    /// </summary>
+    public void RefreshDramModes()
+    {
+        lock (_gate)
+        {
+            foreach (var target in _targets)
+            {
+                if (target.DeviceIndex >= 0 && target.DeviceIndex < _devices.Count && _devices[target.DeviceIndex].Type == DramDeviceType)
+                {
+                    _sentModes.Remove(target.DeviceIndex);
+                    target.Dirty = true;
+                }
+            }
+        }
+    }
+
     /// <summary>Stops all device writes (rescan in progress, connection lost). Returns after any frame in flight is done.</summary>
     public void ClearDevices() => SetDevices([]);
 

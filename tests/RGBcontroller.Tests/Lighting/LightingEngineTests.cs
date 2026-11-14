@@ -170,6 +170,29 @@ public sealed class LightingEngineTests
     }
 
     [Fact]
+    public void RefreshDramModes_PushesOnlyTheRamModeAndFrameAgain()
+    {
+        var engine = Engine(Config("Solid White"));
+        engine.SetDevices([Keyboard, Ram with { Type = 1 }]);
+        var output = new RecordingOutput();
+        var now = TimeSpan.Zero;
+        for (var next = engine.Render(now, output); next is not null; next = engine.Render(now, output))
+        {
+            now += next.Value;
+        }
+
+        var keyboardWrites = output.LedWrites[0];
+        var ramWrites = output.LedWrites[1];
+
+        engine.RefreshDramModes();
+        engine.Render(now + TimeSpan.FromSeconds(5), output);
+
+        Assert.Equal([(0, "Direct"), (1, "Direct"), (1, "Direct")], output.Modes);
+        Assert.Equal(keyboardWrites, output.LedWrites[0]);
+        Assert.Equal(ramWrites + 1, output.LedWrites[1]);
+    }
+
+    [Fact]
     public void ClearDevices_StopsAllDeviceWrites()
     {
         var engine = Engine(Config(DefaultLighting.RainbowProfile));

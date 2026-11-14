@@ -31,6 +31,9 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
     /// </summary>
     private static readonly TimeSpan[] ResendDelays = [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30)];
 
+    /// <summary>After the resends above, the RAM mode and frame are pushed again this often (a stick can lose Direct mode later).</summary>
+    private static readonly TimeSpan DramRefreshInterval = TimeSpan.FromSeconds(15);
+
     private readonly LightingEngine _engine;
     private readonly HardwareOutput _output;
     private readonly RenderLoop _loop;
@@ -159,12 +162,20 @@ internal sealed class LightingController : IDeviceLightingSink, IDisposable
 
     private void OnResend()
     {
-        _engine.ResendAll();
-        _loop.Wake();
-        if (++_resendStep < ResendDelays.Length)
+        if (_resendStep < ResendDelays.Length)
         {
-            _resend.Change(ResendDelays[_resendStep] - ResendDelays[_resendStep - 1], Timeout.InfiniteTimeSpan);
+            _engine.ResendAll();
         }
+        else
+        {
+            _engine.RefreshDramModes();
+        }
+
+        _loop.Wake();
+        _resendStep++;
+        _resend.Change(_resendStep < ResendDelays.Length
+            ? ResendDelays[_resendStep] - ResendDelays[_resendStep - 1]
+            : DramRefreshInterval, Timeout.InfiniteTimeSpan);
     }
 
     /// <summary>Ends the render loop; afterwards nothing is written to the strip or OpenRGB.</summary>
