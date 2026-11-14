@@ -68,7 +68,7 @@ function Shell() {
             <span className="code">{p.code}</span>{p.label}
           </button>
         ))}
-        <div className="rail-foot">{import.meta.env.DEV && !insideApp ? "stand-in data · npm run dev" : "v1.0.0"}</div>
+        <div className="rail-foot">{import.meta.env.DEV && !insideApp ? "stand-in data · npm run dev" : "v1.0.1"}</div>
       </nav>
       <div className="main">
         <TopBar title={PAGES.find(p => p.id === page)!.label} />
