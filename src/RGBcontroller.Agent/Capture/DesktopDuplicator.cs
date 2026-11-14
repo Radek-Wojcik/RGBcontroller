@@ -40,6 +40,16 @@ internal sealed class DesktopDuplicator : IDisposable
 
     private const int MaxMapAttempts = 100;
     private static readonly TimeSpan MapRetryInterval = TimeSpan.FromMilliseconds(0.5);
+
+    /// <summary>After the first short retries the wait for the GPU polls this slowly, to cost no CPU while it is busy.</summary>
+    private static readonly TimeSpan SlowMapRetryInterval = TimeSpan.FromMilliseconds(5);
+
+    /// <summary>
+    /// The longest a frame waits for the GPU to finish its copy. A GPU that never answers (a driver reset, a game hogging
+    /// it) used to block the capture thread inside the driver for good; now the frame is skipped.
+    /// </summary>
+    private static readonly TimeSpan MapDeadline = TimeSpan.FromSeconds(1);
+    private int _mapTimeouts;
     private readonly HighResolutionTimer _mapWait = new();
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _context;
@@ -157,6 +167,9 @@ internal sealed class DesktopDuplicator : IDisposable
 
     /// <summary>Waits up to <paramref name="timeoutMilliseconds"/> for a new desktop image and hands it to <paramref name="sink"/>.</summary>
     /// <exception cref="SharpGenException">An unexpected DXGI or D3D11 failure (the caller re-creates the duplicator).</exception>
+    /// <summary>How many frames were skipped because the GPU did not finish the copy within <see cref="MapDeadline"/>.</summary>
+    public int MapTimeouts => Volatile.Read(ref _mapTimeouts);
+
     public CaptureOutcome TryCapture(uint timeoutMilliseconds, IScreenImageSink sink)
     {
         var result = _duplication.AcquireNextFrame(timeoutMilliseconds, out var info, out var resource);
@@ -191,7 +204,12 @@ internal sealed class DesktopDuplicator : IDisposable
 
         _context.GenerateMips(_mipsView!);
         _context.CopySubresourceRegion(_staging!, 0, 0, 0, 0, _mips!, (uint)_mipLevel);
-        var mapped = MapWhenReady();
+        if (MapWhenReady() is not { } mapped)
+        {
+            Interlocked.Increment(ref _mapTimeouts);
+            return CaptureOutcome.NoChange;
+        }
+
         try
         {
             var (width, height) = SampleSize;
@@ -213,11 +231,12 @@ internal sealed class DesktopDuplicator : IDisposable
     /// Maps the staging texture once the GPU has finished the copy. A plain Map blocks by spinning inside the driver
     /// (spike R7: about 2 ms of CPU per frame on the owner's GPU, more than the whole pipeline), so the copy is flushed
     /// and the map retried with DO_NOT_WAIT after short sleeps on a high-resolution timer. A GPU busy with a game can
-    /// take longer than the retries; then the blocking Map waits for it (WAS_STILL_DRAWING is not an error).
+    /// take longer than the first retries; the polling then slows down, and after <see cref="MapDeadline"/> the frame is skipped.
     /// </summary>
-    private MappedSubresource MapWhenReady()
+    private MappedSubresource? MapWhenReady()
     {
         _context.Flush();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         for (var attempt = 0; ; attempt++)
         {
             var result = _context.Map(_staging!, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.DoNotWait, out var mapped);
@@ -231,12 +250,12 @@ internal sealed class DesktopDuplicator : IDisposable
                 result.CheckError();
             }
 
-            if (attempt >= MaxMapAttempts)
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(started) >= MapDeadline)
             {
-                return _context.Map(_staging!, 0, MapMode.Read);
+                return null;
             }
 
-            _mapWait.Arm(MapRetryInterval);
+            _mapWait.Arm(attempt < MaxMapAttempts ? MapRetryInterval : SlowMapRetryInterval);
             _mapWait.WaitOne();
         }
     }
